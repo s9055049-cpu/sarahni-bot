@@ -1,114 +1,115 @@
-import telebot
+        import telebot
 import sqlite3
+from telebot import types
 
-# 1. توكن البوت الخاص بك من BotFather
+# 1. الإعدادات
 API_TOKEN = '8853538663:AAEoQFVkHudDpQG9xtjc2G4aca6Mbm93EqI'
-
-# 2. الآيدي الشخصي تبعك لتصلك التقارير
 ADMIN_ID = 8820368378
-
 bot = telebot.TeleBot(API_TOKEN)
 
-# إنشاء قاعدة بيانات لحفظ روابط المستخدمين
+# 2. تهيئة قاعدة البيانات
 def init_db():
     conn = sqlite3.connect('sarahni.db')
     cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            user_id INTEGER PRIMARY KEY,
-            username TEXT,
-            full_name TEXT
-        )
-    ''')
+    # جدول المستخدمين
+    cursor.execute('''CREATE TABLE IF NOT EXISTS users 
+                      (user_id INTEGER PRIMARY KEY, username TEXT, full_name TEXT, last_target_id INTEGER)''')
+    # جدول الحظر
+    cursor.execute('''CREATE TABLE IF NOT EXISTS blocks 
+                      (blocker_id INTEGER, blocked_id INTEGER)''')
     conn.commit()
     conn.close()
 
 init_db()
 
-# التعامل مع رابط الدخول (start)
+# 3. التعامل مع أمر البداية
 @bot.message_handler(commands=['start'])
 def handle_start(message):
     chat_id = message.chat.id
     text = message.text.split()
     
-    # حفظ المستخدم في قاعدة البيانات
     conn = sqlite3.connect('sarahni.db')
     cursor = conn.cursor()
-    cursor.execute('INSERT OR REPLACE INTO users VALUES (?, ?, ?)', 
-                   (chat_id, message.from_user.username, message.from_user.first_name))
-    conn.commit()
-    conn.close()
-
-    # إذا دخل عن طريق رابط صراحة لشخص آخر
+    cursor.execute('INSERT OR REPLACE INTO users (user_id, username, full_name, last_target_id) VALUES (?, ?, ?, (SELECT last_target_id FROM users WHERE user_id = ?))', 
+                   (chat_id, message.from_user.username, message.from_user.first_name, chat_id))
+    
     if len(text) > 1:
         target_id = text[1]
         if str(target_id) == str(chat_id):
             bot.send_message(chat_id, "❌ لا يمكنك مصارحة نفسك!")
-            return
-        
-        # نطلب منه إرسال الصراحة
-        msg = bot.send_message(chat_id, "✍️ أكتب الآن رسالتك الصريحة بكل أمان وسرية تامة... وسأقوم بإيصالها دون كشف هويتك! 🤫")
-        bot.register_next_step_handler(msg, send_sarahni_message, target_id)
+        else:
+            cursor.execute('UPDATE users SET last_target_id = ? WHERE user_id = ?', (target_id, chat_id))
+            bot.send_message(chat_id, "✅ تم تحديد الشخص! الآن كل رسالة ترسلها هنا ستصل إليه مباشرة. أكتب رسالتك:")
     else:
-        # الدخول العادي للبوت
-        markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
-        markup.add(telebot.types.KeyboardButton("🔗 إنشاء رابط الصراحة الخاص بي"))
-        bot.send_message(chat_id, "🤖 أهلاً بك في بوت صارحني المطور!\n\nاضغط على الزر بالأسفل لإنشاء رابطك الخاص ونشره لتلقي الرسائل بسرية تامة!", reply_markup=markup)
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.add(types.KeyboardButton("🔗 إنشاء رابط الصراحة الخاص بي"))
+        bot.send_message(chat_id, "أهلاً بك! يمكنك الآن مراسلة من حددته سابقاً، أو إنشاء رابطك الخاص.", reply_markup=markup)
+    
+    conn.commit()
+    conn.close()
 
-# عند الضغط على زر إنشاء الرابط
+# 4. معالجة الرسائل العادية
+@bot.message_handler(func=lambda message: message.text != "🔗 إنشاء رابط الصراحة الخاص بي")
+def handle_all_messages(message):
+    conn = sqlite3.connect('sarahni.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT last_target_id FROM users WHERE user_id = ?', (message.chat.id,))
+    result = cursor.fetchone()
+    conn.close()
+
+    if result and result[0]:
+        send_sarahni_message(message, result[0])
+    else:
+        bot.send_message(message.chat.id, "لم تقم بتحديد شخص للمصارحة. يرجى الدخول عبر رابط الصراحة الخاص به أولاً.")
+
+# 5. دالة إرسال الرسالة مع الحظر
+def send_sarahni_message(message, target_id):
+    sender_id = message.chat.id
+    msg_text = message.text
+    
+    conn = sqlite3.connect('sarahni.db')
+    cursor = conn.cursor()
+    # هل المرسل محظور؟
+    cursor.execute('SELECT * FROM blocks WHERE blocker_id = ? AND blocked_id = ?', (target_id, sender_id))
+    if cursor.fetchone():
+        bot.send_message(sender_id, "❌ لا يمكنك المراسلة، لقد قام هذا الشخص بحظرك.")
+        conn.close()
+        return
+    conn.close()
+
+    # أزرار التحكم
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("🚫 حظر المرسل", callback_data=f"block_{sender_id}"))
+    markup.add(types.InlineKeyboardButton("✅ إلغاء الحظر", callback_data=f"unblock_{sender_id}"))
+
+    try:
+        bot.send_message(target_id, f"📥 **رسالة صراحة جديدة:**\n\n{msg_text}", parse_mode='Markdown', reply_markup=markup)
+        bot.send_message(sender_id, "تم إرسال رسالتك بنجاح! 🤫")
+    except:
+        bot.send_message(sender_id, "❌ فشل الإرسال، ربما قام المستخدم بحظر البوت.")
+
+# 6. معالجة الأزرار (الحظر وإلغاء الحظر)
+@bot.callback_query_handler(func=lambda call: True)
+def callback_query(call):
+    blocker_id = call.message.chat.id
+    action, blocked_id = call.data.split('_')
+    
+    conn = sqlite3.connect('sarahni.db')
+    cursor = conn.cursor()
+    if action == "block":
+        cursor.execute('INSERT OR IGNORE INTO blocks VALUES (?, ?)', (blocker_id, blocked_id))
+        bot.answer_callback_query(call.id, "🚫 تم الحظر!")
+    elif action == "unblock":
+        cursor.execute('DELETE FROM blocks WHERE blocker_id = ? AND blocked_id = ?', (blocker_id, blocked_id))
+        bot.answer_callback_query(call.id, "✅ تم إلغاء الحظر!")
+    conn.commit()
+    conn.close()
+
 @bot.message_handler(func=lambda message: message.text == "🔗 إنشاء رابط الصراحة الخاص بي")
 def create_link(message):
     bot_info = bot.get_me()
     user_link = f"https://t.me/{bot_info.username}?start={message.chat.id}"
-    response = (
-        f"👑 الرابط الخاص بك جاهز الآن للتلقي:\n\n"
-        f"`{user_link}`\n\n"
-        f"انشره على حساباتك (سناب، انستا، تيك توك) واستعد لتلقي الصراحات! 🥳🔒"
-    )
-    bot.send_message(message.chat.id, response, parse_mode='Markdown')
+    bot.send_message(message.chat.id, f"الرابط الخاص بك:\n`{user_link}`", parse_mode='Markdown')
 
-# إرسال الصراحة والتقرير الخاص بك
-def send_sarahni_message(message, target_id):
-    sender_id = message.chat.id
-    sender_name = message.from_user.first_name
-    sender_username = f"@{message.from_user.username}" if message.from_user.username else "لا يوجد يوزر"
-    msg_text = message.text
-
-    # جلب بيانات الشخص المستلم
-    conn = sqlite3.connect('sarahni.db')
-    cursor = conn.cursor()
-    cursor.execute('SELECT username, full_name FROM users WHERE user_id = ?', (target_id,))
-    target_data = cursor.fetchone()
-    conn.close()
-
-    target_name = target_data[1] if target_data else "مستخدم مسجل"
-    target_username = f"@{target_data[0]}" if target_data and target_data[0] else "لا يوجد"
-
-    # 1. إرسال الرسالة للمستلم الأصلي
-    try:
-        bot.send_message(target_id, f"📥 **وصلتك رسالة صراحة جديدة!**\n━━━━━━━━━━━━━━━━━━━\n💬 {msg_text}", parse_mode='Markdown')
-        bot.send_message(sender_id, "تم إرسال رسالتك بنجاح وبسرية تامة! 🤫🔒")
-    except Exception as e:
-        bot.send_message(sender_id, "❌ حدث خطأ، يبدو أن المستخدم قام بحظر البوت.")
-        return
-
-    # 2. إرسال التقرير السري والتجسس لك (الآدمن)
-    report = (
-        f"🕵️‍♂️ **تقرير صراحة جديد:**\n"
-        f"━━━━━━━━━━━━━━━━━━━\n"
-        f"👤 **المرسل:** {sender_name}\n"
-        f"🔗 **يوزر المرسل:** {sender_username}\n"
-        f"🆔 **آيدي المرسل:** `{sender_id}`\n"
-        f"━━━━━━━━━━━━━━━━━━━\n"
-        f"🎯 **المستلم:** {target_name} ({target_username})\n"
-        f"━━━━━━━━━━━━━━━━━━━\n"
-        f"💬 **نص الصراحة:**\n{msg_text}"
-    )
-    try:
-        bot.send_message(ADMIN_ID, report, parse_mode='Markdown')
-    except Exception as e:
-        print(f"فشل إرسال التقرير: {e}")
-
-# تشغيل البوت (تمت إضافة مسح الويب هوك لحل مشكلة التعارض)
 bot.remove_webhook()
 bot.infinity_polling()
