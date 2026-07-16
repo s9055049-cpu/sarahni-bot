@@ -4,7 +4,7 @@ import sqlite3
 from telebot import types
 import html
 
-API_TOKEN = "ضع_التوكن_الجديد_هنا"
+API_TOKEN = "8853538663:AAEoQFVkHudDpQG9xtjc2G4aca6Mbm93EqI"
 ADMIN_ID = 8820368378
 
 bot = telebot.TeleBot(API_TOKEN)
