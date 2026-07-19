@@ -2,7 +2,7 @@
 import telebot
 from telebot import types
 
-# تم وضع التوكن واليوزر الخاصين ببوتك هنا مباشرة
+# التوكن واليوزر الخاصين ببوتك
 BOT_TOKEN = "8682801321:AAEBx5KjhdYSVCZMZIJck-JgM36Osr_Bz2Y"
 BOT_USERNAME = "Sarrh1bot"
 
@@ -111,5 +111,12 @@ def handle_block_callback(call):
     bot.answer_callback_query(call.id, "🎯 تم الحظر بنجاح!")
 
 if __name__ == "__main__":
-    print("🤖 البوت يعمل الآن بنجاح ويكشف الهوية...")
+    print("🧹 جاري حذف الـ Webhook القديم وتنظيف الاتصال بالخادم...")
+    try:
+        bot.delete_webhook(drop_pending_updates=True)
+        print("✅ تم تنظيف الاتصال بنجاح!")
+    except Exception as e:
+        print(f"⚠️ فشل حذف الـ Webhook، لكن سنحاول التشغيل: {e}")
+        
+    print("🤖 البوت يعمل الآن بنجاح ويكشف الهوية بالكامل...")
     bot.infinity_polling()
