@@ -4,11 +4,11 @@ from telebot import types
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-# 1. التوكن واليوزر الخاصين ببوتك
-BOT_TOKEN = "8682801321:AAEBx5KjhdYSVCZMZIJck-JgM36Osr_Bz2Y"
+# 1. التوكن الجديد واليوزر الخاصين ببوتك
+BOT_TOKEN = "8682801321:AAH6D6o_A6-4JLhbLP5aNCOWoa4Afo0gv7k"
 BOT_USERNAME = "Sarrh1bot"
 
-# 2. الـ ID الخاص بكِ (تم التثبيت بنجاح 👑)
+# 2. الـ ID الخاص بكِ الحصري
 ADMIN_ID = 8820368378  
 
 bot = telebot.TeleBot(BOT_TOKEN)
@@ -151,5 +151,5 @@ if __name__ == "__main__":
         pass
         
     threading.Thread(target=run_dummy_server, daemon=True).start()
-    print("👑 البوت يعمل الآن بنظام المالك الحصري (لكِ أنتِ فقط وكل شيء سري)...")
+    print("👑 البوت يعمل الآن بنظام المالك الحصري والتوكن الجديد...")
     bot.infinity_polling()
