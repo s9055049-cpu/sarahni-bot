@@ -1,444 +1,115 @@
 
 import telebot
-import sqlite3
 from telebot import types
-import html
 
-API_TOKEN = "8853538663:AAEoQFVkHudDpQG9xtjc2G4aca6Mbm93EqI"
-ADMIN_ID = 8820368378
+# تم وضع التوكن واليوزر الخاصين ببوتك هنا مباشرة
+BOT_TOKEN = "8682801321:AAEBx5KjhdYSVCZMZIJck-JgM36Osr_Bz2Y"
+BOT_USERNAME = "Sarrh1bot"
 
-bot = telebot.TeleBot(API_TOKEN)
+bot = telebot.TeleBot(BOT_TOKEN)
 
+# قاعدة بيانات مؤقتة في الذاكرة لتخزين الحظر والرسائل
+users_db = {}      # التخزين: {user_id: {"blocked_users": set()}}
+messages_db = {}   # لربط رقم الرسالة بمعرّف المُرسل: {msg_id: sender_id}
+msg_counter = 0
 
-# =========================
-# قاعدة البيانات
-# =========================
-
-def db():
-    return sqlite3.connect("sarahni.db")
-
-
-def init_db():
-
-    conn = db()
-    cur = conn.cursor()
-
-    # المستخدمين
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS users (
-        user_id INTEGER PRIMARY KEY,
-        username TEXT,
-        full_name TEXT
-    )
-    """)
-
-    # الجلسات النشطة
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS sessions (
-        sender_id INTEGER PRIMARY KEY,
-        target_id INTEGER
-    )
-    """)
-
-    # الحظر
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS blocked (
-        owner_id INTEGER,
-        sender_id INTEGER,
-        PRIMARY KEY(owner_id, sender_id)
-    )
-    """)
-
-    # آخر مرسل لكل مستخدم
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS last_sender (
-        owner_id INTEGER PRIMARY KEY,
-        sender_id INTEGER
-    )
-    """)
-
-
-    conn.commit()
-    conn.close()
-
-
-
-init_db()
-
-
-
-# =========================
-# حفظ المستخدم
-# =========================
-
-def save_user(message):
-
-    conn = db()
-    cur = conn.cursor()
-
-    cur.execute(
-        "INSERT OR IGNORE INTO users VALUES (?, ?, ?)",
-        (
-            message.chat.id,
-            message.from_user.username,
-            message.from_user.first_name
-        )
-    )
-
-    conn.commit()
-    conn.close()
-
-
-
-# =========================
-# بداية البوت
-# =========================
-
-@bot.message_handler(commands=["start"])
-def start(message):
-
-    save_user(message)
-
-    args = message.text.split()
-
-
-    # دخول من رابط شخص
-    if len(args) > 1:
-
-        target = int(args[1])
-
-        if target == message.chat.id:
-            bot.send_message(
-                message.chat.id,
-                "❌ لا يمكنك إرسال رسالة لنفسك"
-            )
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    user_id = message.from_user.id
+    text_args = message.text.split()
+    
+    if user_id not in users_db:
+        users_db[user_id] = {"blocked_users": set()}
+        
+    # إذا دخل المستخدم عن طريق رابط الحساب
+    if len(text_args) > 1 and text_args[1].isdigit():
+        target_id = int(text_args[1])
+        
+        if target_id == user_id:
+            bot.send_message(user_id, "❌ لا يمكنك إرسال رسالة لنفسك!")
             return
-
-
-        conn = db()
-        cur = conn.cursor()
-
-        cur.execute(
-            "INSERT OR REPLACE INTO sessions VALUES (?,?)",
-            (
-                message.chat.id,
-                target
-            )
-        )
-
-        conn.commit()
-        conn.close()
-
-
-        keyboard = types.ReplyKeyboardMarkup(
-            resize_keyboard=True
-        )
-
-        keyboard.add(
-            types.KeyboardButton(
-                "⛔ إيقاف المصارحة"
-            )
-        )
-
-
-        bot.send_message(
-            message.chat.id,
-            "✍️ تم فتح المصارحة\n"
-            "أرسل رسائلك الآن بدون فتح الرابط مرة ثانية 🤫",
-            reply_markup=keyboard
-        )
-
+            
+        bot.send_message(user_id, "✍️ أرسل رسالتك الآن، وسيتم تسليمها للمستخدم مع عرض هويتك له:")
+        bot.register_next_step_handler(message, process_anonymous_message, target_id)
         return
 
-
-
-    keyboard = types.ReplyKeyboardMarkup(
-        resize_keyboard=True
+    # عرض رابط الاستقبال الخاص بالمستخدم
+    share_link = f"https://t.me/{BOT_USERNAME}?start={user_id}"
+    welcome_text = (
+        "👋 أهلاً بك في بوت الرسائل والتواصل!\n\n"
+        f"🔗 الرابط الخاص بك لاستقبال الرسائل هو:\n`{share_link}`\n\n"
+        "انشره ليستطيع أصدقاؤك مراسلتك مباشرة من خلال البوت."
     )
+    bot.send_message(user_id, welcome_text, parse_mode="Markdown")
 
-    keyboard.add(
-        types.KeyboardButton(
-            "🔗 إنشاء رابط الصراحة الخاص بي"
-        )
-    )
-
-
-    bot.send_message(
-        message.chat.id,
-        "🤖 أهلاً بك في بوت صارحني\n\n"
-        "أنشئ رابطك واستقبل الرسائل بسرية 🔒",
-        reply_markup=keyboard
-    )
-
-
-
-# =========================
-# إنشاء الرابط
-# =========================
-
-@bot.message_handler(
-    func=lambda m: m.text=="🔗 إنشاء رابط الصراحة الخاص بي"
-)
-def create_link(message):
-
-    me = bot.get_me()
-
-    link = (
-        f"https://t.me/{me.username}"
-        f"?start={message.chat.id}"
-    )
-
-
-    bot.send_message(
-        message.chat.id,
-        f"🔗 رابطك:\n\n<code>{link}</code>",
-        parse_mode="HTML"
-        # =========================
-# إيقاف المصارحة
-# =========================
-
-@bot.message_handler(
-    func=lambda m: m.text == "⛔ إيقاف المصارحة"
-)
-def stop_session(message):
-
-    conn = db()
-    cur = conn.cursor()
-
-    cur.execute(
-        "DELETE FROM sessions WHERE sender_id=?",
-        (message.chat.id,)
-    )
-
-    conn.commit()
-    conn.close()
-
-
-    bot.send_message(
-        message.chat.id,
-        "✅ تم إيقاف المصارحة",
-        reply_markup=types.ReplyKeyboardRemove()
-    )
-
-
-
-# =========================
-# استقبال الرسائل
-# =========================
-
-@bot.message_handler(func=lambda m: True)
-def receive_message(message):
-
-    sender_id = message.chat.id
-    text = message.text
-
-
-    conn = db()
-    cur = conn.cursor()
-
-
-    # معرفة إذا عنده جلسة
-    cur.execute(
-        "SELECT target_id FROM sessions WHERE sender_id=?",
-        (sender_id,)
-    )
-
-    session = cur.fetchone()
-
-
-    if not session:
-        conn.close()
+def process_anonymous_message(message, target_id):
+    global msg_counter
+    sender_id = message.from_user.id
+    
+    # التحقق من الحظر
+    if target_id in users_db and sender_id in users_db[target_id]["blocked_users"]:
+        bot.send_message(sender_id, "❌ عذراً، لا يمكنك إرسال رسالة لهذا المستخدم.")
         return
 
-
-    target_id = session[0]
-
-
-    # فحص الحظر
-    cur.execute(
-        "SELECT * FROM blocked WHERE owner_id=? AND sender_id=?",
-        (target_id, sender_id)
-    )
-
-    blocked = cur.fetchone()
-
-
-    if blocked:
-
-        conn.close()
-
-        bot.send_message(
-            sender_id,
-            "❌ لا يمكنك إرسال رسائل لهذا الشخص"
-        )
-
+    if message.content_type != 'text':
+        bot.send_message(sender_id, "⚠️ البوت يدعم الرسائل النصية فقط حالياً.")
         return
 
+    msg_counter += 1
+    messages_db[msg_counter] = sender_id
 
+    # إنشاء زر الحظر
+    markup = types.InlineKeyboardMarkup()
+    block_button = types.InlineKeyboardButton(
+        text="🚫 حظر هذا المستخدم", 
+        callback_data=f"block_{msg_counter}"
+    )
+    markup.add(block_button)
 
-    # حفظ آخر مرسل
-    cur.execute(
-        "INSERT OR REPLACE INTO last_sender VALUES (?,?)",
-        (target_id, sender_id)
+    # تجهيز بيانات المُرسِل لكشف هويته فوراً
+    first_name = message.from_user.first_name
+    username = f"@{message.from_user.username}" if message.from_user.username else "لا يوجد معرف"
+    
+    info_text = (
+        f"📩 **وصلتك رسالة جديدة!**\n\n"
+        f"💬 **الرسالة:** {message.text}\n\n"
+        f"─── معلومات المُرسِل ───\n"
+        f"👤 **الاسم:** {first_name}\n"
+        f"🔗 **المعرف:** {username}\n"
+        f"🆔 **الـ ID:** `{sender_id}`"
     )
 
+    # إرسال الرسالة مع البيانات للشخص المستهدف
+    try:
+        bot.send_message(target_id, info_text, reply_markup=markup, parse_mode="Markdown")
+        bot.send_message(sender_id, "✅ تم إرسال رسالتك وبياناتك بنجاح!")
+    except Exception as e:
+        bot.send_message(sender_id, "❌ فشل إرسال الرسالة، قد يكون المستخدم قام بتعطيل البوت.")
 
-    conn.commit()
-    conn.close()
+@bot.callback_query_handler(func=lambda call: call.data.startswith('block_'))
+def handle_block_callback(call):
+    receiver_id = call.from_user.id
+    msg_id = int(call.data.split('_')[1])
+    
+    sender_id = messages_db.get(msg_id)
+    
+    if not sender_id:
+        bot.answer_callback_query(call.id, "⚠️ انتهت صلاحية هذا الإجراء أو البيانات غير متوفرة.")
+        return
 
+    if receiver_id not in users_db:
+        users_db[receiver_id] = {"blocked_users": set()}
 
-
-    # أزرار الحظر
-    keyboard = types.InlineKeyboardMarkup()
-
-    keyboard.add(
-        types.InlineKeyboardButton(
-            "🚫 حظر المرسل",
-            callback_data=f"block_{sender_id}"
-        )
+    users_db[receiver_id]["blocked_users"].add(sender_id)
+    
+    # تحديث نص الرسالة لتأكيد الحظر
+    bot.edit_message_text(
+        chat_id=receiver_id,
+        message_id=call.message.message_id,
+        text=f"{call.message.text}\n\n🚫 [تم حظر هذا المستخدم بنجاح]"
     )
+    bot.answer_callback_query(call.id, "🎯 تم الحظر بنجاح!")
 
-    keyboard.add(
-        types.InlineKeyboardButton(
-            "✅ فك حظر آخر شخص",
-            callback_data="unblock"
-        )
-    )
-
-
-    # إرسال للمستلم بدون كشف الهوية
-    bot.send_message(
-        target_id,
-        f"📥 رسالة صراحة جديدة:\n\n"
-        f"💬 {html.escape(text)}",
-        parse_mode="HTML",
-        reply_markup=keyboard
-    )
-
-
-
-    # تقرير لك
-    user = message.from_user
-
-    report = (
-        "🕵️ تقرير صراحة\n\n"
-        f"👤 الاسم: {user.first_name}\n"
-        f"🔗 اليوزر: @{user.username if user.username else 'لا يوجد'}\n"
-        f"🆔 الآيدي: {sender_id}\n\n"
-        f"💬 الرسالة:\n{text}"
-    )
-
-
-    bot.send_message(
-        ADMIN_ID,
-        report
-    )
-
-
-
-
-# =========================
-# أزرار الحظر
-# =========================
-
-@bot.callback_query_handler(
-    func=lambda call: True
-)
-def buttons(call):
-
-    data = call.data
-
-    owner_id = call.message.chat.id
-
-
-
-    # حظر شخص
-    if data.startswith("block_"):
-
-        sender_id = int(
-            data.split("_")[1]
-        )
-
-
-        conn = db()
-        cur = conn.cursor()
-
-
-        cur.execute(
-            "INSERT OR IGNORE INTO blocked VALUES (?,?)",
-            (
-                owner_id,
-                sender_id
-            )
-        )
-
-
-        conn.commit()
-        conn.close()
-
-
-        bot.answer_callback_query(
-            call.id,
-            "تم حظر المرسل 🚫"
-        )
-
-
-
-    # فك الحظر
-    elif data == "unblock":
-
-
-        conn = db()
-        cur = conn.cursor()
-
-
-        cur.execute(
-            "SELECT sender_id FROM last_sender WHERE owner_id=?",
-            (owner_id,)
-        )
-
-        last = cur.fetchone()
-
-
-
-        if last:
-
-            cur.execute(
-                "DELETE FROM blocked WHERE owner_id=? AND sender_id=?",
-                (
-                    owner_id,
-                    last[0]
-                )
-            )
-
-
-            conn.commit()
-
-
-            bot.answer_callback_query(
-                call.id,
-                "تم فك الحظر ✅"
-            )
-
-        else:
-
-            bot.answer_callback_query(
-                call.id,
-                "لا يوجد شخص"
-            )
-
-
-        conn.close()
-
-
-
-# =========================
-# تشغيل البوت
-# =========================
-
-bot.remove_webhook()
-
-print("البوت يعمل ✅")
-
-bot.infinity_polling()
-    )
+if __name__ == "__main__":
+    print("🤖 البوت يعمل الآن بنجاح ويكشف الهوية...")
+    bot.infinity_polling()
