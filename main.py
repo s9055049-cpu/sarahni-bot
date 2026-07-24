@@ -13,11 +13,14 @@ def home():
 def run():
     app.run(host='0.0.0.0', port=8080)
 
-# 2. إعداد البوت مع التوكن الخاص بكِ
+# 2. إعداد البوت والتوكن الخاص بكِ
 TOKEN = '8682801321:AAH6D6o_A6-4JLhbLP5aNCOWoa4Afo0gv7k' 
 bot = telebot.TeleBot(TOKEN)
 
-# 3. إعداد قاعدة البيانات وجداول الرسائل والحظر
+# الـ ID الخاص بكِ لتصلكِ الإشعارات فوراً
+ADMIN_ID = 8820368378
+
+# 3. إعداد قاعدة البيانات
 def init_db():
     conn = sqlite3.connect('sarahni.db')
     conn.execute('PRAGMA journal_mode=WAL')
@@ -36,7 +39,6 @@ def init_db():
 
 init_db()
 
-# 4. دالة التحقق من الحظر
 def is_banned(user_id):
     conn = sqlite3.connect('sarahni.db')
     cursor = conn.cursor()
@@ -47,10 +49,35 @@ def is_banned(user_id):
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, "أهلاً بك في بوت الملاحظات!")
+    bot.reply_to(message, "أهلاً بك في بوت الملاحظات والرسائل السرية!")
+
+# أمر خاص بكِ لمشاهدة جميع الرسائل المحفوظة
+@bot.message_handler(commands=['show'])
+def show_messages(message):
+    if message.from_user.id != ADMIN_ID:
+        return
+    
+    conn = sqlite3.connect('sarahni.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT id, user_id, username, text FROM feedback')
+    rows = cursor.fetchall()
+    conn.close()
+
+    if not rows:
+        bot.reply_to(message, "لا توجد رسائل مخزنة حتى الآن.")
+        return
+
+    response = "📩 **جميع الرسائل المستلمة:**\n\n"
+    for row in rows:
+        response += f"🆔 **الآي دي:** `{row[1]}`\n👤 **اليوزر:** {row[2]}\n💬 **الرسالة:** {row[3]}\n-------------------\n"
+    
+    bot.reply_to(message, response, parse_mode="Markdown")
 
 @bot.message_handler(commands=['ban'])
 def ban_user(message):
+    if message.from_user.id != ADMIN_ID:
+        return
+        
     parts = message.text.split()
     if len(parts) > 1:
         user_to_ban = parts[1]
@@ -63,6 +90,11 @@ def ban_user(message):
 
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
+    # إذا كنتِ أنتِ من ترسلين للبوت، فلا نحسبها رسالة واردة
+    if message.from_user.id == ADMIN_ID:
+        bot.reply_to(message, "أهلاً بكِ يا ملكة، هذه رسالتكِ الخاصة.")
+        return
+
     if is_banned(message.from_user.id):
         bot.reply_to(message, "عذراً، أنت محظور.")
         return
@@ -71,13 +103,9 @@ def handle_message(message):
     username = message.from_user.username
     first_name = message.from_user.first_name
     
-    # التحقق من وجود يوزر أو كتابة "لا يوجد يوزر"
-    if username:
-        username_display = f"@{username}"
-    else:
-        username_display = "لا يوجد يوزر"
+    username_display = f"@{username}" if username else "لا يوجد يوزر"
 
-    # حفظ الرسالة مع اليوزر والآي دي في قاعدة البيانات
+    # 1. حفظ الرسالة في قاعدة البيانات
     conn = sqlite3.connect('sarahni.db')
     cursor = conn.cursor()
     cursor.execute('INSERT INTO feedback (text, user_id, username) VALUES (?, ?, ?)', 
@@ -85,12 +113,16 @@ def handle_message(message):
     conn.commit()
     conn.close()
 
+    # 2. الرد على الشخص الذي أرسل الرسالة
     bot.reply_to(message, "تم استلام رسالتك بنجاح.")
-    
-    # لطباعة معلومات الشخص مباشرة في الـ Logs على Render لرؤيتها بوضوح
-    print(f"رسالة جديدة! الاسم: {first_name} | اليوزر: {username_display} | الـ ID: {user_id} | النص: {message.text}")
 
-# 5. تشغيل الخادم والبوت معاً
+    # 3. إرسال الإشعار الفوري لكِ أنتِ شخصياً على الخاص
+    admin_alert = f"📥 **رسالة جديدة!**\n\n👤 **الاسم:** {first_name}\n🏷️ **اليوزر:** {username_display}\n🆔 **الـ ID:** `{user_id}`\n💬 **النص:** {message.text}"
+    try:
+        bot.send_message(ADMIN_ID, admin_alert, parse_mode="Markdown")
+    except Exception as e:
+        print(f"خطأ في إرسال الإشعار للآدمن: {e}")
+
 if __name__ == '__main__':
     Thread(target=run).start()
     bot.infinity_polling()
