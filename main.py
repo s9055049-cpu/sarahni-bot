@@ -5,7 +5,6 @@ import os
 from flask import Flask
 from threading import Thread
 
-# 1. إعداد Flask لإرضاء Render وفتح المنفذ
 app = Flask('')
 
 @app.route('/')
@@ -16,7 +15,6 @@ def run_flask():
     port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port)
 
-# 2. إعداد البوت والتوكن الخاص بكِ
 TOKEN = '8682801321:AAEBx5KjhdYSVCZMZIJck-JgM36Osr_Bz2Y' 
 bot = telebot.TeleBot(TOKEN)
 
@@ -27,7 +25,6 @@ except:
 
 ADMIN_ID = 8820368378
 
-# 3. إعداد قاعدة البيانات
 def init_db():
     conn = sqlite3.connect('sarahni.db')
     conn.execute('PRAGMA journal_mode=WAL')
@@ -107,11 +104,11 @@ def handle_message(message):
     user_id = message.from_user.id
     username = message.from_user.username
     
-    # استخراج اليوزر بالشكل الصحيح تماماً مثل أول مرة
+    # جلب اليوزر بدقة تامة
     if username:
         username_display = f"@{username}"
     else:
-        username_display = "لا يوجد يوزر"
+        username_display = "بدون يوزر"
 
     # حفظ الرسالة
     conn = sqlite3.connect('sarahni.db')
@@ -123,12 +120,13 @@ def handle_message(message):
 
     bot.reply_to(message, "تم استلام رسالتك بنجاح.")
 
-    # إرسال الإشعار الفوري مع يوزر الشخص الواضح (نفس طريقتنا الأولى)
-    admin_alert = f"📥 **رسالة جديدة!**\n\n🏷️ **اليوزر:** {username_display}\n🆔 **الـ ID:** `{user_id}`\n💬 **النص:** {message.text}"
+    # إرسال الإشعار الفوري لكِ وفيه اليوزر صريحاً
+    admin_alert = f"📥 **رسالة جديدة!**\n\n🏷️ **يوزر المرسل:** {username_display}\n🆔 **الـ ID:** `{user_id}`\n💬 **النص:** {message.text}"
+    
     try:
         bot.send_message(ADMIN_ID, admin_alert, parse_mode="Markdown")
     except Exception as e:
-        print(f"خطأ في إرسال الإشعار للآدمن: {e}")
+        print(f"خطأ: {e}")
 
 if __name__ == '__main__':
     flask_thread = Thread(target=run_flask)
