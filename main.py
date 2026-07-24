@@ -4,7 +4,7 @@ import sqlite3
 from flask import Flask
 from threading import Thread
 
-# 1. إعداد Flask لتمويه Render ومنع إغلاق البوت
+# 1. إعداد Flask لتمويه Render
 app = Flask('')
 @app.route('/')
 def home():
@@ -17,7 +17,9 @@ def run():
 TOKEN = 'ضعي_التوكن_هنا' 
 bot = telebot.TeleBot(TOKEN)
 
-# 3. إعداد قاعدة البيانات وتحديث جدول الرسائل ليحفظ اليوزر والـ ID
+# معرفك الشخصي (اختياري: إذا كنتِ تريدين أن يرسل لك البوت إشعاراً بالرسائل، ضعي الآي دي الخاص بك هنا، أو اتركيه فارغاً)
+# ADMIN_ID = 123456789 
+
 def init_db():
     conn = sqlite3.connect('sarahni.db')
     conn.execute('PRAGMA journal_mode=WAL')
@@ -36,7 +38,6 @@ def init_db():
 
 init_db()
 
-# 4. دالة التحقق من الحظر
 def is_banned(user_id):
     conn = sqlite3.connect('sarahni.db')
     cursor = conn.cursor()
@@ -69,10 +70,15 @@ def handle_message(message):
     
     user_id = message.from_user.id
     username = message.from_user.username
-    # إذا لم يكن لديه يوزر، يكتب "لا يوجد يوزر"
-    username_display = f"@{username}" if username else "لا يوجد يوزر"
+    first_name = message.from_user.first_name
+    
+    # تنسيق اليوزر بشكل صحيح أو إظهار أن لديه اسم فقط بدون يوزر
+    if username:
+        username_display = f"@{username}"
+    else:
+        username_display = "لا يوجد يوزر"
 
-    # حفظ الرسالة مع الـ ID والـ Username في قاعدة البيانات
+    # حفظ الرسالة في قاعدة البيانات
     conn = sqlite3.connect('sarahni.db')
     cursor = conn.cursor()
     cursor.execute('INSERT INTO feedback (text, user_id, username) VALUES (?, ?, ?)', 
@@ -80,9 +86,12 @@ def handle_message(message):
     conn.commit()
     conn.close()
 
-    bot.reply_to(message, "تم استلام رسالتك.")
+    # رد مؤكد للمرسل
+    bot.reply_to(message, "تم استلام رسالتك بنجاح.")
 
-# 5. تشغيل الخادم والبوت معاً
+    # طباعة المعلومات في الـ Logs الخاصة بـ Render لنراها بوضوح
+    print(f"رسالة جديدة! الاسم: {first_name} | اليوزر: {username_display} | الـ ID: {user_id} | النص: {message.text}")
+
 if __name__ == '__main__':
     Thread(target=run).start()
     bot.infinity_polling()
