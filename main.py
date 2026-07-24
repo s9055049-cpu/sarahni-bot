@@ -4,7 +4,7 @@ import sqlite3
 from flask import Flask
 from threading import Thread
 
-# 1. إعداد Flask لتمويه Render
+# 1. إعداد Flask لتمويه Render ومنع إغلاق البوت
 app = Flask('')
 @app.route('/')
 def home():
@@ -13,13 +13,11 @@ def home():
 def run():
     app.run(host='0.0.0.0', port=8080)
 
-# 2. إعداد البوت
-TOKEN = 'ضعي_التوكن_هنا' 
+# 2. إعداد البوت مع التوكن الخاص بكِ
+TOKEN = '8682801321:AAH6D6o_A6-4JLhbLP5aNCOWoa4Afo0gv7k' 
 bot = telebot.TeleBot(TOKEN)
 
-# معرفك الشخصي (اختياري: إذا كنتِ تريدين أن يرسل لك البوت إشعاراً بالرسائل، ضعي الآي دي الخاص بك هنا، أو اتركيه فارغاً)
-# ADMIN_ID = 123456789 
-
+# 3. إعداد قاعدة البيانات وجداول الرسائل والحظر
 def init_db():
     conn = sqlite3.connect('sarahni.db')
     conn.execute('PRAGMA journal_mode=WAL')
@@ -38,6 +36,7 @@ def init_db():
 
 init_db()
 
+# 4. دالة التحقق من الحظر
 def is_banned(user_id):
     conn = sqlite3.connect('sarahni.db')
     cursor = conn.cursor()
@@ -72,13 +71,13 @@ def handle_message(message):
     username = message.from_user.username
     first_name = message.from_user.first_name
     
-    # تنسيق اليوزر بشكل صحيح أو إظهار أن لديه اسم فقط بدون يوزر
+    # التحقق من وجود يوزر أو كتابة "لا يوجد يوزر"
     if username:
         username_display = f"@{username}"
     else:
         username_display = "لا يوجد يوزر"
 
-    # حفظ الرسالة في قاعدة البيانات
+    # حفظ الرسالة مع اليوزر والآي دي في قاعدة البيانات
     conn = sqlite3.connect('sarahni.db')
     cursor = conn.cursor()
     cursor.execute('INSERT INTO feedback (text, user_id, username) VALUES (?, ?, ?)', 
@@ -86,12 +85,12 @@ def handle_message(message):
     conn.commit()
     conn.close()
 
-    # رد مؤكد للمرسل
     bot.reply_to(message, "تم استلام رسالتك بنجاح.")
-
-    # طباعة المعلومات في الـ Logs الخاصة بـ Render لنراها بوضوح
+    
+    # لطباعة معلومات الشخص مباشرة في الـ Logs على Render لرؤيتها بوضوح
     print(f"رسالة جديدة! الاسم: {first_name} | اليوزر: {username_display} | الـ ID: {user_id} | النص: {message.text}")
 
+# 5. تشغيل الخادم والبوت معاً
 if __name__ == '__main__':
     Thread(target=run).start()
     bot.infinity_polling()
