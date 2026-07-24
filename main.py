@@ -1,23 +1,32 @@
 
 import telebot
 import sqlite3
+import os
 from flask import Flask
 from threading import Thread
 
-# 1. إعداد Flask لتمويه Render ومنع إغلاق البوت
+# 1. إعداد Flask لفتح المنفذ فوراً وإرضاء Render
 app = Flask('')
+
 @app.route('/')
 def home():
-    return "البوت يعمل!"
+    return "البوت يعمل بكفاءة!"
 
-def run():
-    app.run(host='0.0.0.0', port=8080)
+def run_flask():
+    # Render يزودنا بالمنفذ عبر البيئة، وإذا لم يوجد نستخدم 8080
+    port = int(os.environ.get('PORT', 8080))
+    app.run(host='0.0.0.0', port=port)
 
 # 2. إعداد البوت والتوكن الخاص بكِ
-TOKEN = '8682801321:AAH6D6o_A6-4JLhbLP5aNCOWoa4Afo0gv7k' 
+TOKEN = '8682801321:AAEBx5KjhdYSVCZMZIJck-JgM36Osr_Bz2Y' 
 bot = telebot.TeleBot(TOKEN)
 
-# الـ ID الخاص بكِ لتصلكِ الإشعارات فوراً
+# حذف أي ويب هوك قديم احتياطياً
+try:
+    bot.remove_webhook()
+except:
+    pass
+
 ADMIN_ID = 8820368378
 
 # 3. إعداد قاعدة البيانات
@@ -51,7 +60,6 @@ def is_banned(user_id):
 def send_welcome(message):
     bot.reply_to(message, "أهلاً بك في بوت الملاحظات والرسائل السرية!")
 
-# أمر خاص بكِ لمشاهدة جميع الرسائل المحفوظة
 @bot.message_handler(commands=['show'])
 def show_messages(message):
     if message.from_user.id != ADMIN_ID:
@@ -90,7 +98,6 @@ def ban_user(message):
 
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
-    # إذا كنتِ أنتِ من ترسلين للبوت، فلا نحسبها رسالة واردة
     if message.from_user.id == ADMIN_ID:
         bot.reply_to(message, "أهلاً بكِ يا ملكة، هذه رسالتكِ الخاصة.")
         return
@@ -105,7 +112,7 @@ def handle_message(message):
     
     username_display = f"@{username}" if username else "لا يوجد يوزر"
 
-    # 1. حفظ الرسالة في قاعدة البيانات
+    # حفظ الرسالة
     conn = sqlite3.connect('sarahni.db')
     cursor = conn.cursor()
     cursor.execute('INSERT INTO feedback (text, user_id, username) VALUES (?, ?, ?)', 
@@ -113,16 +120,21 @@ def handle_message(message):
     conn.commit()
     conn.close()
 
-    # 2. الرد على الشخص الذي أرسل الرسالة
     bot.reply_to(message, "تم استلام رسالتك بنجاح.")
 
-    # 3. إرسال الإشعار الفوري لكِ أنتِ شخصياً على الخاص
+    # إرسال إشعار فوري لكِ
     admin_alert = f"📥 **رسالة جديدة!**\n\n👤 **الاسم:** {first_name}\n🏷️ **اليوزر:** {username_display}\n🆔 **الـ ID:** `{user_id}`\n💬 **النص:** {message.text}"
     try:
         bot.send_message(ADMIN_ID, admin_alert, parse_mode="Markdown")
     except Exception as e:
         print(f"خطأ في إرسال الإشعار للآدمن: {e}")
 
+# 4. تشغيل خادم الويب والبوت معاً بطريقة صحيحة تمنع خطأ الـ Port
 if __name__ == '__main__':
-    Thread(target=run).start()
+    # نشغل Flask في خلفية مستقلة لفتح المنفذ فوراً
+    flask_thread = Thread(target=run_flask)
+    flask_thread.daemon = True
+    flask_thread.start()
+    
+    # تشغيل البوت
     bot.infinity_polling()
