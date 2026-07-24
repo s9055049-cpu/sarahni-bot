@@ -5,7 +5,7 @@ import os
 from flask import Flask
 from threading import Thread
 
-# 1. إعداد Flask لفتح المنفذ فوراً وإرضاء Render
+# 1. إعداد Flask لإرضاء Render وفتح المنفذ
 app = Flask('')
 
 @app.route('/')
@@ -13,7 +13,6 @@ def home():
     return "البوت يعمل بكفاءة!"
 
 def run_flask():
-    # Render يزودنا بالمنفذ عبر البيئة، وإذا لم يوجد نستخدم 8080
     port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port)
 
@@ -21,7 +20,6 @@ def run_flask():
 TOKEN = '8682801321:AAEBx5KjhdYSVCZMZIJck-JgM36Osr_Bz2Y' 
 bot = telebot.TeleBot(TOKEN)
 
-# حذف أي ويب هوك قديم احتياطياً
 try:
     bot.remove_webhook()
 except:
@@ -108,9 +106,12 @@ def handle_message(message):
     
     user_id = message.from_user.id
     username = message.from_user.username
-    first_name = message.from_user.first_name
     
-    username_display = f"@{username}" if username else "لا يوجد يوزر"
+    # استخراج اليوزر بالشكل الصحيح تماماً مثل أول مرة
+    if username:
+        username_display = f"@{username}"
+    else:
+        username_display = "لا يوجد يوزر"
 
     # حفظ الرسالة
     conn = sqlite3.connect('sarahni.db')
@@ -122,19 +123,16 @@ def handle_message(message):
 
     bot.reply_to(message, "تم استلام رسالتك بنجاح.")
 
-    # إرسال إشعار فوري لكِ
-    admin_alert = f"📥 **رسالة جديدة!**\n\n👤 **الاسم:** {first_name}\n🏷️ **اليوزر:** {username_display}\n🆔 **الـ ID:** `{user_id}`\n💬 **النص:** {message.text}"
+    # إرسال الإشعار الفوري مع يوزر الشخص الواضح (نفس طريقتنا الأولى)
+    admin_alert = f"📥 **رسالة جديدة!**\n\n🏷️ **اليوزر:** {username_display}\n🆔 **الـ ID:** `{user_id}`\n💬 **النص:** {message.text}"
     try:
         bot.send_message(ADMIN_ID, admin_alert, parse_mode="Markdown")
     except Exception as e:
         print(f"خطأ في إرسال الإشعار للآدمن: {e}")
 
-# 4. تشغيل خادم الويب والبوت معاً بطريقة صحيحة تمنع خطأ الـ Port
 if __name__ == '__main__':
-    # نشغل Flask في خلفية مستقلة لفتح المنفذ فوراً
     flask_thread = Thread(target=run_flask)
     flask_thread.daemon = True
     flask_thread.start()
     
-    # تشغيل البوت
     bot.infinity_polling()
