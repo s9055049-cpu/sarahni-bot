@@ -72,7 +72,8 @@ def show_messages(message):
 
     response = "📩 **جميع الرسائل المستلمة:**\n\n"
     for row in rows:
-        response += f"🆔 **الآي دي:** `{row[1]}`\n👤 **اليوزر:** {row[2]}\n💬 **الرسالة:** {row[3]}\n-------------------\n"
+        profile_link = f"tg://user?id={row[1]}"
+        response += f"🆔 **الآي دي:** [{row[1]}]({profile_link})\n👤 **اليوزر:** {row[2]}\n💬 **الرسالة:** {row[3]}\n-------------------\n"
     
     bot.reply_to(message, response, parse_mode="Markdown")
 
@@ -103,12 +104,12 @@ def handle_message(message):
     
     user_id = message.from_user.id
     username = message.from_user.username
+    first_name = message.from_user.first_name
     
-    # جلب اليوزر بدقة تامة
     if username:
         username_display = f"@{username}"
     else:
-        username_display = "بدون يوزر"
+        username_display = "مخفي (خاص)"
 
     # حفظ الرسالة
     conn = sqlite3.connect('sarahni.db')
@@ -120,8 +121,11 @@ def handle_message(message):
 
     bot.reply_to(message, "تم استلام رسالتك بنجاح.")
 
-    # إرسال الإشعار الفوري لكِ وفيه اليوزر صريحاً
-    admin_alert = f"📥 **رسالة جديدة!**\n\n🏷️ **يوزر المرسل:** {username_display}\n🆔 **الـ ID:** `{user_id}`\n💬 **النص:** {message.text}"
+    # رابط مباشر للحساب باستخدام الـ ID حصراً لفتح حسابه فوراً
+    profile_link = f"tg://user?id={user_id}"
+
+    # إرسال الإشعار الفوري مع الـ ID كرابط مباشر يفتح حساب الشخص بضغطة زر
+    admin_alert = f"صارحني 💭:\n📩 وصلتك رسالة صراحة جديدة:\n\n{message.text}\n\n👁‍🗨 تقرير:\n👤 المرسل: 🔒 ID: [{user_id}]({profile_link})\n🏷️ اليوزر: {username_display}"
     
     try:
         bot.send_message(ADMIN_ID, admin_alert, parse_mode="Markdown")
