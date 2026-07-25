@@ -1,4 +1,3 @@
-
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, CommandHandler, filters
 
@@ -8,8 +7,9 @@ MY_ADMIN_ID = 8820368378
 # قائمة المحظورين
 blocked_users = set()
 
-# قاموس لتتبع الرابط الذي دخل عليه المستخدم
+# قواميس لربط الرسائل وتتبعها لتمكين الرد المتبادل
 user_targets = {}
+message_to_sender = {}
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -86,47 +86,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sender_username = f"@{sender.username}" if sender.username else "لا يوجد"
     sender_name = sender.first_name if sender.first_name else "مجهول"
 
-    # 1. التحقق إذا كان المستخدم يقوم بعمل "رد (Reply)" على رسالة سابقة داخل البوت
-    if update.message.reply_to_message:
-        replied_text = update.message.reply_to_message.text
-        
-        # محاولة استخراج الأيدي من رسالة المعلومات إذا كان المستخدم هو المديرة ويرد على تقرير
-        import re
-        match_id = re.search(r"الأيدي:\s*(\d+)", replied_text)
-        
-        if match_id:
-            recipient_id = int(match_id.group(1))
-            await context.bot.send_message(
-                chat_id=recipient_id,
-                text=f"💬 رد جديد:\n\n{message_text}"
-            )
-            await update.message.reply_text("تم إرسال ردك بنجاح ✅")
-            return
-
-    # 2. التحقق هل الرسالة أُرسلت عبر رابط (صارحني)
-    is_via_link = context.user_data.get('is_via_link', False)
-    target_id = user_targets.get(sender_id)
-
-    if is_via_link and target_id:
-        # إرسال الصراحة للشخص المستهدف (بدون معلومات المرسل للحفاظ على السرية)
-        await context.bot.send_message(
-            chat_id=target_id,
-            text=f"💌 وصلت صراحة جديدة!\n\n{message_text}"
-        )
-        await update.message.reply_text("تم إرسال صراحتك بنجاح 🥷✨")
-        
-        # تنظيف الحالة
-        if sender_id in user_targets:
-            del user_targets[sender_id]
-        context.user_data['is_via_link'] = False
-        
-    else:
-        # 3. رسالة عادية مباشرة للبوت -> تصل لكِ أنتِ وحدك مع معلومات المرسل الكاملة
-        await update.message.reply_text("تم إرسال رسالتك للبوت بنجاح ✨")
-        
+    # دالة مساعدة لإرسال معلومات المرسل إلك أنتِ وحدك
+    async def send_admin_report(text_content):
         await context.bot.send_message(
             chat_id=MY_ADMIN_ID,
-            text=f"💌 وصلت رسالة مباشرة للبوت:\n\n{message_text}"
+            text=text_content
         )
         await context.bot.send_message(
             chat_id=MY_ADMIN_ID,
@@ -135,6 +99,60 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                  f"- الأيدي: {sender_id}\n"
                  f"- اليوزر: {sender_username}"
         )
+
+    # 1. نظام الرد (Reply)
+    if update.message.reply_to_message:
+        replied_msg_id = update.message.reply_to_message.message_id
+        if replied_msg_id in message_to_sender:
+            original_sender_id = message_to_sender[replied_msg_id]
+            
+            # إرسال الرد للمرسل بدون معلومات
+            sent_msg = await context.bot.send_message(
+                chat_id=original_sender_id,
+                text=f"💬 وصلتك رد:\n\n{message_text}"
+            )
+            message_to_sender[sent_msg.message_id] = sender_id
+            
+            await update.message.reply_text("تم الرد على هذه الرسالة بنجاح ✅")
+            
+            # إرسال تقرير الرد إلك أنتِ كمديرة مع معلومات الرد
+            await send_admin_report(f"📋 [مراقبة رد] تم إرسال رد إلى ({original_sender_id}):\n\n{message_text}")
+            return
+
+    # 2. إرسال عبر رابط (صارحني)
+    is_via_link = context.user_data.get('is_via_link', False)
+    target_id = user_targets.get(sender_id)
+
+    if is_via_link and target_id:
+        # إرسال الصراحة للمستهدف (بدون معلومات)
+        sent_msg = await context.bot.send_message(
+            chat_id=target_id,
+            text=f"💌 وصلت صراحة جديدة!\n\n{message_text}"
+        )
+        message_to_sender[sent_msg.message_id] = sender_id
+        
+        await update.message.reply_text("تم إرسال صراحتك بنجاح 🥷✨")
+        
+        # إرسال تقرير المراقبة والمعلومات إلك أنتِ وحدك دائماً
+        if target_id != MY_ADMIN_ID:
+            await send_admin_report(f"📋 [مراقبة صارحني] رسالة أُرسلت إلى المستخدم ({target_id}):\n\n{message_text}")
+        else:
+            await send_admin_report(f"💌 وصلت صراحة مباشرة إليكِ:\n\n{message_text}")
+        
+        if sender_id in user_targets:
+            del user_targets[sender_id]
+        context.user_data['is_via_link'] = False
+        
+    else:
+        # 3. رسالة مباشرة للبوت
+        sent_msg = await context.bot.send_message(
+            chat_id=MY_ADMIN_ID,
+            text=f"💌 وصلت رسالة مباشرة للبوت:\n\n{message_text}"
+        )
+        message_to_sender[sent_msg.message_id] = sender_id
+        
+        await send_admin_report(f"💌 وصلت رسالة مباشرة للبوت:\n\n{message_text}")
+        await update.message.reply_text("تم إرسال رسالتك للبوت بنجاح ✨")
 
 if __name__ == '__main__':
     application = ApplicationBuilder().token(TOKEN).build()
