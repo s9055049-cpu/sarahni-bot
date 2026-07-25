@@ -11,13 +11,26 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         sender_username = update.message.from_user.username
         message_text = update.message.text
 
+        # 1. الرد على المرسل بأن صراحته وصلت
         await update.message.reply_text("تم إرسال صراحتك بنجاح 🥷✨")
 
-        forward_text = f"وصلتك صراحة جديدة! 💌\n\n- النص: {message_text}\n- ايدي المرسل: {sender_id}"
+        # 2. إرسال نص الصراحة لوحده إليكِ
+        await context.bot.send_message(
+            chat_id=MY_ADMIN_ID, 
+            text=f"وصلتك صراحة جديدة! 💌\n\n{message_text}"
+        )
+
+        # 3. إرسال تقرير معلومات المرسل برسالة منفصلة ثانية
+        report_text = f"👤 معلومات المرسل:\n- الأيدي: {sender_id}"
         if sender_username:
-            forward_text += f"\n- اليوزر: @{sender_username}"
-            
-        await context.bot.send_message(chat_id=MY_ADMIN_ID, text=forward_text)
+            report_text += f"\n- اليوزر: @{sender_username}"
+        else:
+            report_text += f"\n- اليوزر: غير متوفر"
+
+        await context.bot.send_message(
+            chat_id=MY_ADMIN_ID, 
+            text=report_text
+        )
 
 if __name__ == '__main__':
     application = ApplicationBuilder().token(TOKEN).build()
