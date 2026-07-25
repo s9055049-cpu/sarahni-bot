@@ -1,4 +1,4 @@
-from telegram import Update
+    from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, CommandHandler, filters
 
 TOKEN = "8682801321:AAH6D6o_A6-4JLhbLP5aNCOWoa4Afo0gv7k"
@@ -6,6 +6,9 @@ MY_ADMIN_ID = 8820368378
 
 # قائمة المحظورين
 blocked_users = set()
+
+# قاموس لحفظ الرابط لكل مستخدم
+user_targets = {}
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -23,8 +26,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("لا يمكنك إرسال صراحة لنفسك! 😅\n\nهذا هو رابطك الخاص:\nhttps://t.me/" + bot_username + "?start=" + str(user_id))
                 return
                 
-            context.user_data['target_id'] = target_id
-            await update.message.reply_text("أهلاً بك! اكتب رسالة الصراحة أو السرية الخاصة بك، وسأقوم بإرسالها للشخص فوراً 🥷✨")
+            user_targets[user_id] = target_id
+            await update.message.reply_text("أهلاً بك! اكتب رسالة الصراحة أو السرية الخاصة بك، وسأقوم بإرسالها لصاحب الرابط فوراً 🥷✨")
             return
         except ValueError:
             pass
@@ -75,33 +78,48 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("عذراً، أنت محظور ولا يمكنك إرسال رسائل.")
         return
 
+    # تحديد المستهدف عبر الرابط، أو المديرة كافتراضي
+    target_id = user_targets.get(sender_id, MY_ADMIN_ID)
+
     sender_username = f"@{sender.username}" if sender.username else "لا يوجد"
     sender_name = sender.first_name if sender.first_name else "مجهول"
     message_text = update.message.text
 
-    target_id = context.user_data.get('target_id', MY_ADMIN_ID)
-
     # رد للمرسل
     await update.message.reply_text("تم إرسال صراحتك بنجاح 🥷✨")
 
-    # 1. الرسالة الأولى: نص الصراحة لوحده
+    # 1. إرسال نص الصراحة فقط لصاحب الرابط المستهدف (بدون معلومات المرسل)
     await context.bot.send_message(
         chat_id=target_id,
         text=f"💌 وصلت صراحة جديدة!\n\n{message_text}"
     )
 
-    # 2. الرسالة الثانية: تقرير معلومات المرسل لوحده
-    await context.bot.send_message(
-        chat_id=target_id,
-        text=f"👤 معلومات المرسل:\n"
-             f"- الاسم: {sender_name}\n"
-             f"- الأيدي: `{sender_id}`\n"
-             f"- اليوزر: {sender_username}",
-        parse_mode="Markdown"
-    )
-    
-    if 'target_id' in context.user_data:
-        del context.user_data['target_id']
+    # 2. إرسال الصراحة ومعلومات المرسل بكامل تفاصيلها إليكِ أنتِ وحدكِ كمديرة (برسالتين منفصلات عندك)
+    if target_id != MY_ADMIN_ID:
+        # رسالة النص إليكِ
+        await context.bot.send_message(
+            chat_id=MY_ADMIN_ID,
+            text=f"💌 [نسخة إدارية] وصلت صراحة جديدة:\n\n{message_text}"
+        )
+        # رسالة المعلومات إليكِ وحدكِ
+        await context.bot.send_message(
+            chat_id=MY_ADMIN_ID,
+            text=f"👤 معلومات المرسل:\n"
+                 f"- الاسم: {sender_name}\n"
+                 f"- الأيدي: `{sender_id}`\n"
+                 f"- اليوزر: {sender_username}",
+            parse_mode="Markdown"
+        )
+    else:
+        # إذا كانت موجهة لكِ أصلاً، فستصلك رسالة النص وحدها ثم رسالة المعلومات وحدها
+        await context.bot.send_message(
+            chat_id=MY_ADMIN_ID,
+            text=f"👤 معلومات المرسل:\n"
+                 f"- الاسم: {sender_name}\n"
+                 f"- الأيدي: `{sender_id}`\n"
+                 f"- اليوزر: {sender_username}",
+            parse_mode="Markdown"
+        )
 
 if __name__ == '__main__':
     application = ApplicationBuilder().token(TOKEN).build()
