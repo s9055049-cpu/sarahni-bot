@@ -1,47 +1,25 @@
 
-import os
-import threading
-from flask import Flask
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
 
 TOKEN = "8682801321:AAH6D6o_A6-4JLhbLP5aNCOWoa4Afo0gv7k"
 MY_ADMIN_ID = 8820368378
 
-# سيرفر الويب لاستقبال طلبات Render و UptimeRobot
-app = Flask('')
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message and update.message.text:
+        sender_id = update.message.from_user.id
+        sender_username = update.message.from_user.username
+        message_text = update.message.text
 
-@app.route('/')
-def home():
-    return "Bot is active!"
+        await update.message.reply_text("تم إرسال صراحتك بنجاح 🥷✨")
 
-# تشغيل بوت تليجرام في خلفية مستقلة
-def run_telegram_bot():
-    application = ApplicationBuilder().token(TOKEN).build()
-    
-    async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        if update.message and update.message.text:
-            sender_id = update.message.from_user.id
-            sender_username = update.message.from_user.username
-            message_text = update.message.text
-
-            await update.message.reply_text("تم إرسال صراحتك بنجاح 🥷✨")
-
-            forward_text = f"وصلتك صراحة جديدة! 💌\n\n- النص: {message_text}\n- ايدي المرسل: {sender_id}"
-            if sender_username:
-                forward_text += f"\n- اليوزر: @{sender_username}"
-                
-            await context.bot.send_message(chat_id=MY_ADMIN_ID, text=forward_text)
-
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+        forward_text = f"وصلتك صراحة جديدة! 💌\n\n- النص: {message_text}\n- ايدي المرسل: {sender_id}"
+        if sender_username:
+            forward_text += f"\n- اليوزر: @{sender_username}"
+            
+        await context.bot.send_message(chat_id=MY_ADMIN_ID, text=forward_text)
 
 if __name__ == '__main__':
-    # بدء تشغيل البوت في مسار منفصل
-    bot_thread = threading.Thread(target=run_telegram_bot)
-    bot_thread.daemon = True
-    bot_thread.start()
-
-    # تشغيل سيرفر الويب على البورت المطلوب من رندر
-    port = int(os.environ.get('PORT', 10000))
-    app.run(host='0.0.0.0', port=port)
+    application = ApplicationBuilder().token(TOKEN).build()
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
