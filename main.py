@@ -8,7 +8,7 @@ MY_ADMIN_ID = 8820368378
 # قائمة المحظورين
 blocked_users = set()
 
-# قاموس لتتبع الرابط اللي فاته المستخدم
+# قاموس لتتبع الرابط الذي دخل عليه المستخدم
 user_targets = {}
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -28,11 +28,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
                 
             user_targets[user_id] = target_id
+            context.user_data['is_via_link'] = True
+            
             await update.message.reply_text("أهلاً بك! اكتب رسالة الصراحة الخاصة بك، وسأقوم بإرسالها لصاحب الرابط فوراً 🥷✨")
             return
         except ValueError:
             pass
 
+    context.user_data['is_via_link'] = False
     user_link = f"https://t.me/{bot_username}?start={user_id}"
     await update.message.reply_text(
         f"أهلاً بك في بوت صارحني الشامل 🥷✨\n\n"
@@ -79,36 +82,59 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("عذراً، أنت محظور ولا يمكنك إرسال رسائل.")
         return
 
-    target_id = user_targets.get(sender_id, MY_ADMIN_ID)
-
+    message_text = update.message.text
     sender_username = f"@{sender.username}" if sender.username else "لا يوجد"
     sender_name = sender.first_name if sender.first_name else "مجهول"
-    message_text = update.message.text
 
-    # رد للمرسل
-    await update.message.reply_text("تم إرسال صراحتك بنجاح 🥷✨")
+    # 1. التحقق إذا كان المستخدم يقوم بعمل "رد (Reply)" على رسالة سابقة داخل البوت
+    if update.message.reply_to_message:
+        replied_text = update.message.reply_to_message.text
+        
+        # محاولة استخراج الأيدي من رسالة المعلومات إذا كان المستخدم هو المديرة ويرد على تقرير
+        import re
+        match_id = re.search(r"الأيدي:\s*(\d+)", replied_text)
+        
+        if match_id:
+            recipient_id = int(match_id.group(1))
+            await context.bot.send_message(
+                chat_id=recipient_id,
+                text=f"💬 رد جديد:\n\n{message_text}"
+            )
+            await update.message.reply_text("تم إرسال ردك بنجاح ✅")
+            return
 
-    # 1. إرسال نص الصراحة فقط للشخص المستهدف (بدون معلومات المرسل)
-    await context.bot.send_message(
-        chat_id=target_id,
-        text=f"💌 وصلت صراحة جديدة!\n\n{message_text}"
-    )
+    # 2. التحقق هل الرسالة أُرسلت عبر رابط (صارحني)
+    is_via_link = context.user_data.get('is_via_link', False)
+    target_id = user_targets.get(sender_id)
 
-    # 2. إرسال تقرير المراقبة إذا كانت موجهة لشخص آخر
-    if target_id != MY_ADMIN_ID:
+    if is_via_link and target_id:
+        # إرسال الصراحة للشخص المستهدف (بدون معلومات المرسل للحفاظ على السرية)
+        await context.bot.send_message(
+            chat_id=target_id,
+            text=f"💌 وصلت صراحة جديدة!\n\n{message_text}"
+        )
+        await update.message.reply_text("تم إرسال صراحتك بنجاح 🥷✨")
+        
+        # تنظيف الحالة
+        if sender_id in user_targets:
+            del user_targets[sender_id]
+        context.user_data['is_via_link'] = False
+        
+    else:
+        # 3. رسالة عادية مباشرة للبوت -> تصل لكِ أنتِ وحدك مع معلومات المرسل الكاملة
+        await update.message.reply_text("تم إرسال رسالتك للبوت بنجاح ✨")
+        
         await context.bot.send_message(
             chat_id=MY_ADMIN_ID,
-            text=f"📋 [مراقبة البوت] رسالة صراحة أُرسلت إلى المستخدم ({target_id}):\n\n{message_text}"
+            text=f"💌 وصلت رسالة مباشرة للبوت:\n\n{message_text}"
         )
-    
-    # 3. إرسال معلومات المرسل إليكِ وحدكِ كنص عادي (بدون استخدام رموز قد تسبب خطأ)
-    await context.bot.send_message(
-        chat_id=MY_ADMIN_ID,
-        text=f"👤 معلومات المرسل:\n"
-             f"- الاسم: {sender_name}\n"
-             f"- الأيدي: {sender_id}\n"
-             f"- اليوزر: {sender_username}"
-    )
+        await context.bot.send_message(
+            chat_id=MY_ADMIN_ID,
+            text=f"👤 معلومات المرسل:\n"
+                 f"- الاسم: {sender_name}\n"
+                 f"- الأيدي: {sender_id}\n"
+                 f"- اليوزر: {sender_username}"
+        )
 
 if __name__ == '__main__':
     application = ApplicationBuilder().token(TOKEN).build()
