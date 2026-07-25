@@ -1,3 +1,4 @@
+
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, CommandHandler, filters
 
@@ -26,7 +27,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("لا يمكنك إرسال صراحة لنفسك! 😅\n\nهذا هو رابطك الخاص:\nhttps://t.me/" + bot_username + "?start=" + str(user_id))
                 return
                 
-            # حفظ الشخص المستهدف صاحب الرابط
             user_targets[user_id] = target_id
             await update.message.reply_text("أهلاً بك! اكتب رسالة الصراحة الخاصة بك، وسأقوم بإرسالها لصاحب الرابط فوراً 🥷✨")
             return
@@ -79,7 +79,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("عذراً، أنت محظور ولا يمكنك إرسال رسائل.")
         return
 
-    # تحديد الهدف الحقيقي (صاحب الرابط، أو إلك كمديرة لو ما في رابط)
     target_id = user_targets.get(sender_id, MY_ADMIN_ID)
 
     sender_username = f"@{sender.username}" if sender.username else "لا يوجد"
@@ -89,29 +88,26 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # رد للمرسل
     await update.message.reply_text("تم إرسال صراحتك بنجاح 🥷✨")
 
-    # 1. إرسال نص الصراحة فقط للشخص المستهدف (سواء كان شخص عادي أو أنتِ) وبدون أي معلومات عن المرسل
+    # 1. إرسال نص الصراحة فقط للشخص المستهدف (بدون معلومات المرسل)
     await context.bot.send_message(
         chat_id=target_id,
         text=f"💌 وصلت صراحة جديدة!\n\n{message_text}"
     )
 
-    # 2. إرسال تقرير المراقبة والمعلومات الكاملة إليكِ أنتِ وحدكِ كمديرة (رسالة النص + رسالة المعلومات برسايل مستقلة)
-    # ملاحظة: إذا كانت الرسالة موجهة إلك أساساً، فستصلك رسالة الصراحة أولاً ثم رسالتين المعلومات.
-    # أما لو كانت موجهة لشخص ثاني، فرح يوصله النص، وتوصلك أنتِ نسخة من النص ومعلومات المرسل الكاملة.
+    # 2. إرسال تقرير المراقبة إذا كانت موجهة لشخص آخر
     if target_id != MY_ADMIN_ID:
         await context.bot.send_message(
             chat_id=MY_ADMIN_ID,
             text=f"📋 [مراقبة البوت] رسالة صراحة أُرسلت إلى المستخدم ({target_id}):\n\n{message_text}"
         )
     
-    # رسالة معلومات المرسل المستقلة إليكِ وحدكِ في كل حال من الأحوال
+    # 3. إرسال معلومات المرسل إليكِ وحدكِ كنص عادي (بدون استخدام رموز قد تسبب خطأ)
     await context.bot.send_message(
         chat_id=MY_ADMIN_ID,
         text=f"👤 معلومات المرسل:\n"
              f"- الاسم: {sender_name}\n"
-             f"- الأيدي: `{sender_id}`\n"
-             f"- اليوزر: {sender_username}",
-        parse_mode="Markdown"
+             f"- الأيدي: {sender_id}\n"
+             f"- اليوزر: {sender_username}"
     )
 
 if __name__ == '__main__':
